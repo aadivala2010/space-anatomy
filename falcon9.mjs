@@ -530,8 +530,6 @@ labels(LABELS, { L: -190, R: 190 });
 // MISSION
 // =====================================================================================
 const MISSION = String.raw`
-// 3-D views: booster landing, ISS docking, entry, splashdown (at = MAP times below: 541, tDock, tD + 2300, tSplash)
-const LANDINGS = [{ id: "f9", at: 541 }, { id: "dock", at: 100800 }, { id: "dentry", at: 100800 + 180 * 86400 + 54000 + 2300 }, { id: "dsplash", at: 100800 + 180 * 86400 + 54000 + 3150 }];
 // ---- Crew Dragon ascent (a Crew rotation flight), time-warped
 const T_START = -6, T_END = 760;
 const WIN = [[-6, 14, 1], [140, 175, 4], [520, 540, 6], [700, 760, 12]];
@@ -595,6 +593,12 @@ const MAP = (() => {
   const station = { id: "iss", col: "#cfe0ff", name: "ISS", g: "iss", path: [[-6, iss]] };
   return {
     end: END, objs: [dragon, booster, station], hud: "dragon", scene,
+    // 3-D: liftoff, ascent, booster landing, ISS docking, entry, splashdown; free flight in between
+    land: [
+      { id: "f9pad", from: -6, to: 30 }, { id: "f9asc", from: 30, to: 760 }, { id: "f9", at: 541 }, { id: "dock", at: tDock },
+      { id: "dentry", from: tD + 2100, to: tD + 2620 }, { id: "dsplash", at: tSplash, to: END },
+      { id: "coast", craft: [[-1e9, "dragon"], [tDock, "dragonIss"], [tUndock, "dragon"], [tD - 600, "capsule"]], chutes: [4, 35, 38, "#d8442c"] },
+    ],
     marks: [{ b: "earth", a: site0, kind: "pad", name: "LC-39A", to: 3000 }, { b: "earth", a: ship, kind: "droneship", name: "Droneship", to: 3000 }, { b: "earth", a: d + 2.7436, kind: "boat", name: "Recovery ship", from: tD }],
     cam: [
       [-6, "dragon", 400], [140, "dragon", 1200], [400, "b1", 150], [490, "b1", 25], [575, "dragon", 3500], [760, "earth", 9800],
@@ -610,7 +614,7 @@ const MAP = (() => {
     ],
   };
 })();
-const RET = MAP.scene;
+const RET = MAP.scene, LANDINGS = MAP.land;
 const arms = [...svg.querySelectorAll("[data-arm]")];
 const riseAt = (t) => (t > 0 ? 18 * t * t : 0);
 const S1 = ["eng", "s1", "is"];

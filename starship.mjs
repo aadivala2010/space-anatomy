@@ -519,8 +519,11 @@ const MAP = (() => {
   const sats = { id: "sats", col: "#9fb3d1", name: "Starlink", g: "sat", end: 5200, path: [[1200, orb("earth", 172, 178, ang(orbit, 1200) + 0.00005, 1200)]] };
   return {
     end: END, objs: [ship, booster, sats], hud: "ship", scene,
-    // 3-D views: booster catch, Starlink deploy, peak entry heating, ship catch
-    land: [{ id: "sh", at: 415 }, { id: "pez", at: 1200 }, { id: "sentry", at: tD + 900 }, { id: "scatch", at: tCatch }],
+    // 3-D: liftoff, ascent and hot staging, booster catch, Starlink deploy, entry, ship catch; free flight in between
+    land: [
+      { id: "shpad", from: -7, to: 30 }, { id: "shasc", from: 30, to: 620 }, { id: "sh", at: 415 }, { id: "pez", at: 1200 },
+      { id: "sentry", from: tD + 400, to: tD + 1500 }, { id: "scatch", at: tCatch, to: END }, { id: "coast", craft: [[-1e9, "ship"]] },
+    ],
     marks: [{ b: "earth", a: site0, kind: "tower", name: "Starbase tower" }],
     cam: [
       [-7, "ship", 400], [140, "ship", 900], [300, "b1", 250], [385, "b1", 15], [440, "ship", 2500], [620, "earth", 9800],

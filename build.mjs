@@ -1305,8 +1305,12 @@ const MAP = (() => {
   const icps = { id: "icps", col: "#e7b98a", name: "ICPS", g: "icps", end: 40000, path: [[12255, dock("orion")], [12256, orb("earth", 185, 70000, PH, 6990)]] };
   return {
     end: END, objs: [orion, icps], hud: "orion", home,
-    // 3-D views: ICPS separation, far-side flyby, skip entry, splashdown
-    land: [{ id: "osep", at: 12255 }, { id: "flyby", at: tFB }, { id: "oentry", at: tEI + 130 }, { id: "osplash", at: tSplash }],
+    // 3-D: liftoff, ascent to high Earth orbit, ICPS separation, far-side flyby, skip entry, splashdown; free flight in between
+    land: [
+      { id: "slspad", from: -8, to: 30 }, { id: "slsasc", from: 30, to: 12250 }, { id: "osep", at: 12255 }, { id: "flyby", at: tFB },
+      { id: "oentry", from: tEI, to: tEI + 900 }, { id: "osplash", at: tSplash, to: END },
+      { id: "coast", craft: [[-1e9, "orion"], [tEI - 1200, "orionCm"]], chutes: [3, 35, 40, "#e2672a"] },
+    ],
     marks: [{ b: "earth", a: site0, kind: "pad", name: "LC-39B", to: 30000 }, { b: "earth", a: aSplash + 0.0006, kind: "boat", name: "Recovery ship", from: tEI - 30000 }],
     cam: [
       [-8, "orion", 500], [200, "orion", 1500], [600, "earth", 9800], [6300, "earth", 14000], [7400, "earth", 90000], [12000, "orion", 2500],

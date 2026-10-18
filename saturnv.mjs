@@ -549,8 +549,13 @@ labels(LABELS, { L: -270, R: 270 });
 // MISSION
 // =====================================================================================
 const MISSION = String.raw`
-// 3-D views (at = MAP times below): transposition & docking, Eagle's landing, lunar liftoff, docking in lunar orbit, entry, splashdown
-const LANDINGS = [{ id: "td", at: 15420 }, { id: "lm", at: 369940 }, { id: "lmasc", at: 447720 }, { id: "lmdock", at: 460980 }, { id: "aentry", at: 702186 + 150 }, { id: "asplash", at: 703115 }];
+// 3-D (times = MAP times below): liftoff, ascent to TLI and separation, transposition & docking, Eagle's landing and stay,
+// lunar liftoff, docking in lunar orbit, entry, splashdown; free flight in between
+const LANDINGS = [
+  { id: "svpad", from: -9, to: 30 }, { id: "svasc", from: 30, to: 15308 }, { id: "td", at: 15420 }, { id: "lm", at: 369940, to: 447717 },
+  { id: "lmasc", at: 447720 }, { id: "lmdock", at: 460980 }, { id: "aentry", from: 702186, to: 702186 + 394 }, { id: "asplash", at: 703115, to: 703115 + 2400 },
+  { id: "coast", craft: [[-1e9, "csmlm"], [360720, "lm"], [447720, "lmasc"], [460980, "csmasc"], [468600, "csm"], [701340, "apolloCm"]], chutes: [3, 25.4, 30, "#d33a2c"] },
+];
 // ---- Apollo 11, 16 July 1969, time-warped
 const T_START = -9, T_END = 11880;
 const WIN = [[-9, 14, 1], [130, 172, 4], [185, 200, 4], [540, 560, 5], [9850, 10220, 120], [11700, 11880, 20]];

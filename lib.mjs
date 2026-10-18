@@ -1114,10 +1114,19 @@ function skyAt(alt) {
 let fxClock = 0, lastFs = null;
 /*@MISSION@*/
 if (typeof speedAt === "undefined") window.speedAt = (t) => { let b = t < 10 ? 1 : t < 60 ? 1 + (t - 10) * 0.5 : t < 500 ? 30 : t < 1500 ? 120 : 1500; for (const [a, z, v] of WIN) if (t >= a && t <= z) b = Math.min(b, v); return b; };
-// 3-D views: the vehicle's LANDINGS say which ones and when; the clock runs at a scene's speed while it is up
-const LAND = typeof LANDINGS === "object" ? makeLand(LANDINGS, stage) : null;
 // the vehicle scene ends at its T_END; the mission map carries on to MAP.end
 const ISO_END = T_END, HAS_MAP = typeof MAP === "object", M_END = HAS_MAP ? MAP.end : T_END;
+// the 3-D player: the vehicle's LANDINGS list its shots; it reads the flight profile, the map's burns, parachutes and poses
+const hudObj = (t) => { let id = MAP.hud; if (Array.isArray(id)) for (const [a, x] of MAP.hud) if (t >= a) id = x; return MAP.objs.find((o) => o.id === id) || MAP.objs[0]; };
+const spansAt = (rows, t) => (rows || []).filter(([a, b]) => t >= a && t < b).map((r) => r[2]);
+const LAND = typeof LANDINGS === "object" && HAS_MAP ? makeLand(LANDINGS, stage, {
+  start: T_START, end: M_END,
+  hud: (t) => (t < ISO_END ? { alt: interp(ALT, t), vel: interp(VEL, t), ref: "earth", de: interp(ALT, t), dm: 384000 } : MM.hud(t)),
+  fx: (t) => spansAt(hudObj(t).fx, t),
+  pose: (t) => spansAt(hudObj(t).pose, t)[0] || "",
+  speed: (t) => missionSpeed(t),
+  playing: () => playing,
+}) : null;
 if (HAS_MAP) { EVENTS.push(...MAP.events); EVENTS.sort((a, b) => a[0] - b[0]); }
 const KEY_T = EVENTS.map((e) => e[0]);
 // after the scene: fast through coasts, slow near every event
@@ -1147,7 +1156,7 @@ if (HAS_MAP) {
   for (const ev of MAP.events) ev[2] = tAt(tauAt(ev[0]) + (ev[2] || 3.4)) - ev[0];
   MM.init(MAP, tauAt);
   mmap.addEventListener("pointerdown", (ev) => ev.stopPropagation());
-  mmap.addEventListener("click", () => { if (missionT < ISO_END || inRet(missionT)) { mapForced = !mapForced; MM.zoomReset(); drawMap(); } });
+  mmap.addEventListener("click", () => { if (missionT < ISO_END || inRet(missionT) || (LAND && LAND.on(missionT))) { mapForced = !mapForced; MM.zoomReset(); drawMap(); } });
   mmap.addEventListener("wheel", (ev) => { if (!stage.dataset.map) return; ev.preventDefault(); ev.stopPropagation(); MM.zoomBy(Math.exp((ev.deltaMode === 1 ? ev.deltaY * 16 : ev.deltaY) * 0.0015)); drawMap(); }, { passive: false });
 }
 // ---- return scene: back in the 3-D view for re-entry and landing (the vehicle's RET says what is shown)
@@ -1175,8 +1184,9 @@ function retFx(fs) {
 }
 function drawMap() {
   if (!HAS_MAP) return;
-  const on = flight, full = on && !(LAND && LAND.on(missionT)) && ((missionT >= ISO_END && !inRet(missionT)) || mapForced);
-  mmap.hidden = !on || !!(LAND && LAND.on(missionT));
+  // with the 3-D view up the map is an inset (click it for the full map); without it the map takes over between scenes
+  const on = flight, l3 = !!(LAND && LAND.on(missionT)), full = on && (mapForced || (!l3 && missionT >= ISO_END && !inRet(missionT)));
+  mmap.hidden = !on;
   const st = full ? (missionT >= ISO_END && !inRet(missionT) ? "full" : "forced") : "";
   if ((stage.dataset.map || "") !== st) { st ? (stage.dataset.map = st) : delete stage.dataset.map; if (!st) MM.zoomReset(); }
   if (on) MM.draw(missionT, tau, full);
@@ -1187,7 +1197,7 @@ const fxOn = FX.init(fxCanvas);
 if (fxOn) stage.setAttribute("data-gl", "");
 function fxFrame() {
   if (!fxOn || !lastFs) return;
-  const st = stage.dataset.map ? null : lastFs.ret ? lastFs.gl : fxState(lastFs);
+  const st = stage.dataset.map || (LAND && LAND.on(missionT)) ? null : lastFs.ret ? lastFs.gl : fxState(lastFs);
   if (!st) { FX.clear(); fxFlash.style.opacity = "0"; return; }
   st.clock = fxClock;
   st.sky = skyAt(lastFs.alt).map((x) => x / 255);
@@ -1265,7 +1275,7 @@ function flightTick(now) {
   if (playing) { tau = Math.min(TOTAL, tau + dt); fxClock += still.matches ? 0 : dt; if (tau >= TOTAL) setPlaying(false); }
   missionT = tAt(tau);
   slider.value = String(Math.round((tau / TOTAL) * 1000));
-  shake = still.matches ? [0, 0] : inRet(missionT) ? retShake() : missionT > ISO_END ? [0, 0] : shakeAt(missionT);
+  shake = still.matches || (LAND && LAND.on(missionT)) ? [0, 0] : inRet(missionT) ? retShake() : missionT > ISO_END ? [0, 0] : shakeAt(missionT);
   draw();
   camFollow(dt, false);
   if (!cam.follow) fxFrame();

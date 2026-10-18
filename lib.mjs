@@ -458,6 +458,9 @@ export const VEHICLES = [
   ["saturnv", "Saturn V"],
 ];
 
+// which 3-D landing each vehicle page links to
+const LANDING = { sls: "hls", starship: "sh", falcon9: "f9", saturnv: "lm" };
+
 const CSS = `
 html,body{height:100%;overflow:hidden}
 .app{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:20px;align-items:stretch}
@@ -745,7 +748,7 @@ ${body}
     return `<section class="grp"><h3>${title}</h3><ul>${rows}</ul></section>`;
   }).join("");
   const suffix = theme === "light" ? "-light" : "";
-  const nav = `<nav class="veh" aria-label="Vehicle">${VEHICLES.map(([id, name]) => (id === cfg.id ? `<a aria-current="page">${name}</a>` : `<a href="${id}${suffix}.html">${name}</a>`)).join("")}</nav>`;
+  const nav = `<nav class="veh" aria-label="Vehicle">${VEHICLES.map(([id, name]) => (id === cfg.id ? `<a aria-current="page">${name}</a>` : `<a href="${id}${suffix}.html">${name}</a>`)).join("")}<a href="landing.html#${LANDING[cfg.id]}">3D landings</a></nav>`;
   const page = `
 <div class="head"><div class="head-l"><h1>${cfg.h1}</h1><p>${cfg.sub}</p></div>${nav}</div>
 <div class="app">

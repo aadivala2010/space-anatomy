@@ -549,6 +549,7 @@ labels(LABELS, { L: -270, R: 270 });
 // MISSION
 // =====================================================================================
 const MISSION = String.raw`
+const LANDING = { id: "lm", at: 369940 }; // 3-D view of Eagle's last 2.5 minutes; at = tLand below
 // ---- Apollo 11, 16 July 1969, time-warped
 const T_START = -9, T_END = 11880;
 const WIN = [[-9, 14, 1], [130, 172, 4], [185, 200, 4], [540, 560, 5], [9850, 10220, 120], [11700, 11880, 20]];
@@ -639,7 +640,7 @@ const MAP = (() => {
       [15420, "Transposition & docking · Eagle pulled from the S-IVB"], [40000, "Translunar coast · three days out"],
       [tLOI - 50000, "Entering the Moon's sphere of influence"], [tLOI, "Lunar orbit insertion · behind the Moon, no radio"],
       [tUndock, "Eagle undocks · “The Eagle has wings”"], [tDOI, "Descent orbit insertion"], [tPDI, "Powered descent initiation"],
-      [tPDI + 300, "1202 program alarm · still GO"], [tLand - 25, "Contact light"], [tLand, "“The Eagle has landed” · Tranquility Base"],
+      [tPDI + 300, "1202 program alarm · still GO"], [tLand - 1, "Contact light"], [tLand, "“The Eagle has landed” · Tranquility Base"],
       [393860, "“One small step” · first moonwalk"], [401940, "Moonwalk ends · 2 h 31 min outside"], [tLift, "Lunar liftoff · ascent stage"],
       [tDock, "Eagle docks with Columbia"], [tJett, "Ascent stage jettisoned"], [tTEI, "Trans-Earth injection · behind the Moon"],
       [tTEI + 60000, "Trans-Earth coast · 2½ days"], [tSM, "Service module jettisoned"], [tEI, "Entry interface · 11 km/s at 122 km"],

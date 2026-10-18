@@ -7,6 +7,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { FX_FRAGMENT, FX_RUNTIME } from "./fx.mjs";
 import { MAP_CSS, MAP_RUNTIME } from "./map.mjs";
+import { LAND_CSS, LAND_RUNTIME } from "./land.mjs";
 
 const SKILL = join(homedir(), ".claude", "skills", "anatomy-3d-skill");
 export const k = await import(pathToFileURL(join(SKILL, "kit", "iso-kit.mjs")).href);
@@ -458,9 +459,6 @@ export const VEHICLES = [
   ["saturnv", "Saturn V"],
 ];
 
-// which 3-D landing each vehicle page links to
-const LANDING = { sls: "hls", starship: "sh", falcon9: "f9", saturnv: "lm" };
-
 const CSS = `
 html,body{height:100%;overflow:hidden}
 .app{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:20px;align-items:stretch}
@@ -748,7 +746,7 @@ ${body}
     return `<section class="grp"><h3>${title}</h3><ul>${rows}</ul></section>`;
   }).join("");
   const suffix = theme === "light" ? "-light" : "";
-  const nav = `<nav class="veh" aria-label="Vehicle">${VEHICLES.map(([id, name]) => (id === cfg.id ? `<a aria-current="page">${name}</a>` : `<a href="${id}${suffix}.html">${name}</a>`)).join("")}<a href="landing.html#${LANDING[cfg.id]}">3D landings</a></nav>`;
+  const nav = `<nav class="veh" aria-label="Vehicle">${VEHICLES.map(([id, name]) => (id === cfg.id ? `<a aria-current="page">${name}</a>` : `<a href="${id}${suffix}.html">${name}</a>`)).join("")}</nav>`;
   const page = `
 <div class="head"><div class="head-l"><h1>${cfg.h1}</h1><p>${cfg.sub}</p></div>${nav}</div>
 <div class="app">
@@ -795,8 +793,8 @@ ${LIVE}
 `;
   const out = cfg.id + (theme === "light" ? "-light.html" : ".html");
   const html = k
-    .pageHtml({ title: cfg.title, theme, body: page, script: kitScript() + glScript() + `const FX_FRAGMENT = ${JSON.stringify(FX_FRAGMENT)};` + FX_RUNTIME + live.replace("/*@MISSION@*/", () => MAP_RUNTIME + cfg.mission), width: 1280 })
-    .replace("</style>", () => CSS + MAP_CSS + (cfg.css || "") + "</style>");
+    .pageHtml({ title: cfg.title, theme, body: page, script: kitScript() + glScript() + `const FX_FRAGMENT = ${JSON.stringify(FX_FRAGMENT)};` + FX_RUNTIME + live.replace("/*@MISSION@*/", () => MAP_RUNTIME + LAND_RUNTIME + cfg.mission), width: 1280 })
+    .replace("</style>", () => CSS + MAP_CSS + LAND_CSS + (cfg.css || "") + "</style>");
   writeFileSync(join(HERE, out), html);
   console.log("wrote", out, (html.length / 1024).toFixed(0) + " KB,", items.length, "items,", Object.keys(PARTS).length, "parts");
 }
@@ -1116,12 +1114,16 @@ function skyAt(alt) {
 let fxClock = 0, lastFs = null;
 /*@MISSION@*/
 if (typeof speedAt === "undefined") window.speedAt = (t) => { let b = t < 10 ? 1 : t < 60 ? 1 + (t - 10) * 0.5 : t < 500 ? 30 : t < 1500 ? 120 : 1500; for (const [a, z, v] of WIN) if (t >= a && t <= z) b = Math.min(b, v); return b; };
+// 3-D landing view: the vehicle's LANDING says which one and when; the clock runs at its speed while it is up
+const LAND = typeof LANDING === "object" ? makeLand(LANDING, stage) : null;
+const inLand = (t) => !!LAND && t >= LAND.a0 && t <= LAND.a1;
 // the vehicle scene ends at its T_END; the mission map carries on to MAP.end
 const ISO_END = T_END, HAS_MAP = typeof MAP === "object", M_END = HAS_MAP ? MAP.end : T_END;
 if (HAS_MAP) { EVENTS.push(...MAP.events); EVENTS.sort((a, b) => a[0] - b[0]); }
 const KEY_T = EVENTS.map((e) => e[0]);
 // after the scene: fast through coasts, slow near every event
 function missionSpeed(t) {
+  if (inLand(t)) return LAND.speed;
   if (t < ISO_END) return speedAt(t);
   let d = Infinity;
   for (const k of KEY_T) d = Math.min(d, Math.abs(t - k));
@@ -1173,7 +1175,7 @@ function retFx(fs) {
 }
 function drawMap() {
   if (!HAS_MAP) return;
-  const on = flight, full = on && ((missionT >= ISO_END && !inRet(missionT)) || mapForced);
+  const on = flight, full = on && !(LAND && LAND.on(missionT)) && ((missionT >= ISO_END && !inRet(missionT)) || mapForced);
   mmap.hidden = !on;
   const st = full ? (missionT >= ISO_END && !inRet(missionT) ? "full" : "forced") : "";
   if ((stage.dataset.map || "") !== st) { st ? (stage.dataset.map = st) : delete stage.dataset.map; if (!st) MM.zoomReset(); }
@@ -1198,6 +1200,7 @@ function applyFlightFx(fs) {
   const t = missionT;
   let alt = fs.alt, vel = fs.vel, ref = "";
   if (HAS_MAP && t >= ISO_END) { const h = MM.hud(t); alt = h.alt; vel = h.vel; ref = h.ref === "moon" ? " above the Moon" : ""; }
+  if (LAND) { LAND.draw(t); if (LAND.on(t)) ({ alt, vel, ref } = LAND.hud()); }
   drawMap();
   fs.ret ? stage.setAttribute("data-ret", "") : stage.removeAttribute("data-ret");
   if (fs.ret) retFx(fs);
@@ -1302,6 +1305,7 @@ function exitFlight() {
   fxFlash.style.opacity = "0"; shake = [0, 0]; lastFs = null;
   earth.style.opacity = "0";
   mapForced = false; drawMap();
+  if (LAND) LAND.draw(-Infinity);
   draw();
   fit();
 }

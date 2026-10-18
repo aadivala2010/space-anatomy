@@ -530,6 +530,7 @@ labels(LABELS, { L: -190, R: 190 });
 // MISSION
 // =====================================================================================
 const MISSION = String.raw`
+const LANDING = { id: "f9", at: 541 }; // 3-D booster landing view
 // ---- Crew Dragon ascent (a Crew rotation flight), time-warped
 const T_START = -6, T_END = 760;
 const WIN = [[-6, 14, 1], [140, 175, 4], [520, 540, 6], [700, 760, 12]];
@@ -600,7 +601,7 @@ const MAP = (() => {
       [tUndock - 900, "iss", 6], [tUndock + 1500, "earth", 9800], [tD + 1500, "dragon", 3000], [tD + 2100, "dragon", 500], [tD + 2700, "dragon", 40], [tD + 2900, "dragon", 6],
     ],
     events: [
-      [395, "Booster entry burn"], [515, "Booster landing burn · legs deploy"], [541, "Booster lands on the droneship"],
+      [395, "Booster entry burn"], [531, "Booster landing burn · legs deploy"], [541, "Booster lands on the droneship"],
       [3000, "Phasing burns · Dragon climbs toward the ISS"], [tDock - 1500, "Final approach to the ISS"], [tDock, "Soft capture · docked to the ISS"],
       [tDock + 7200, "Hatches open · the crew joins the station"], [tDock + 90 * DAY, "Expedition · about six months aboard the ISS"],
       [tUndock, "Undocking · Dragon backs away"], [tD - 600, "Trunk jettison"], [tD, "Deorbit burn"], [tD + 2100, "Entry interface · 7.5 km/s"],

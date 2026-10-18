@@ -456,6 +456,7 @@ labels(LABELS, { L: -320, R: 320 });
 // MISSION
 // =====================================================================================
 const MISSION = String.raw`
+const LANDING = { id: "sh", at: 415 }; // 3-D booster catch view
 // ---- an orbital test flight from Starbase, time-warped
 const T_START = -7, T_END = 620;
 const WIN = [[-7, 16, 1], [150, 180, 3], [500, 525, 6]];
@@ -525,7 +526,7 @@ const MAP = (() => {
       [1150, "ship", 200], [1500, "earth", 9800], [tD - 600, "ship", 2500], [tD + 600, "ship", 900], [tD + 1500, "ship", 200], [tD + 1800, "ship", 20], [tD + 1890, "ship", 3],
     ],
     events: [
-      [395, "Booster landing burn"], [415, "Booster caught by the tower's chopsticks"], [1200, "Payload deploy · Starlink satellites"],
+      [391, "Booster landing burn"], [415, "Booster caught by the tower's chopsticks"], [1200, "Payload deploy · Starlink satellites"],
       [2400, "Raptor relight in orbit"], [tD, "Deorbit burn"], [tD + 500, "Entry interface · belly-first"], [tD + 900, "Peak heating on the heat shield"],
       [tD + 1880, "Landing flip"], [tCatch, "Ship returns to the tower for a catch"], [tCatch + 600, "Both stages back at the pad · ready to fly again"],
     ],

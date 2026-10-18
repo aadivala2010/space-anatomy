@@ -1114,16 +1114,16 @@ function skyAt(alt) {
 let fxClock = 0, lastFs = null;
 /*@MISSION@*/
 if (typeof speedAt === "undefined") window.speedAt = (t) => { let b = t < 10 ? 1 : t < 60 ? 1 + (t - 10) * 0.5 : t < 500 ? 30 : t < 1500 ? 120 : 1500; for (const [a, z, v] of WIN) if (t >= a && t <= z) b = Math.min(b, v); return b; };
-// 3-D landing view: the vehicle's LANDING says which one and when; the clock runs at its speed while it is up
-const LAND = typeof LANDING === "object" ? makeLand(LANDING, stage) : null;
-const inLand = (t) => !!LAND && t >= LAND.a0 && t <= LAND.a1;
+// 3-D views: the vehicle's LANDINGS say which ones and when; the clock runs at a scene's speed while it is up
+const LAND = typeof LANDINGS === "object" ? makeLand(LANDINGS, stage) : null;
 // the vehicle scene ends at its T_END; the mission map carries on to MAP.end
 const ISO_END = T_END, HAS_MAP = typeof MAP === "object", M_END = HAS_MAP ? MAP.end : T_END;
 if (HAS_MAP) { EVENTS.push(...MAP.events); EVENTS.sort((a, b) => a[0] - b[0]); }
 const KEY_T = EVENTS.map((e) => e[0]);
 // after the scene: fast through coasts, slow near every event
 function missionSpeed(t) {
-  if (inLand(t)) return LAND.speed;
+  const ls = LAND && LAND.speedAt(t);
+  if (ls) return ls;
   if (t < ISO_END) return speedAt(t);
   let d = Infinity;
   for (const k of KEY_T) d = Math.min(d, Math.abs(t - k));
@@ -1176,7 +1176,7 @@ function retFx(fs) {
 function drawMap() {
   if (!HAS_MAP) return;
   const on = flight, full = on && !(LAND && LAND.on(missionT)) && ((missionT >= ISO_END && !inRet(missionT)) || mapForced);
-  mmap.hidden = !on;
+  mmap.hidden = !on || !!(LAND && LAND.on(missionT));
   const st = full ? (missionT >= ISO_END && !inRet(missionT) ? "full" : "forced") : "";
   if ((stage.dataset.map || "") !== st) { st ? (stage.dataset.map = st) : delete stage.dataset.map; if (!st) MM.zoomReset(); }
   if (on) MM.draw(missionT, tau, full);
@@ -1200,7 +1200,7 @@ function applyFlightFx(fs) {
   const t = missionT;
   let alt = fs.alt, vel = fs.vel, ref = "";
   if (HAS_MAP && t >= ISO_END) { const h = MM.hud(t); alt = h.alt; vel = h.vel; ref = h.ref === "moon" ? " above the Moon" : ""; }
-  if (LAND) { LAND.draw(t); if (LAND.on(t)) ({ alt, vel, ref } = LAND.hud()); }
+  if (LAND) { LAND.draw(t); const lh = LAND.on(t) && LAND.hud(); if (lh) ({ alt, vel, ref } = lh); }
   drawMap();
   fs.ret ? stage.setAttribute("data-ret", "") : stage.removeAttribute("data-ret");
   if (fs.ret) retFx(fs);

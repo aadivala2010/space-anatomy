@@ -549,7 +549,8 @@ labels(LABELS, { L: -270, R: 270 });
 // MISSION
 // =====================================================================================
 const MISSION = String.raw`
-const LANDING = { id: "lm", at: 369940 }; // 3-D view of Eagle's last 2.5 minutes; at = tLand below
+// 3-D views (at = MAP times below): transposition & docking, Eagle's landing, lunar liftoff, docking in lunar orbit, entry, splashdown
+const LANDINGS = [{ id: "td", at: 15420 }, { id: "lm", at: 369940 }, { id: "lmasc", at: 447720 }, { id: "lmdock", at: 460980 }, { id: "aentry", at: 702186 + 150 }, { id: "asplash", at: 703115 }];
 // ---- Apollo 11, 16 July 1969, time-warped
 const T_START = -9, T_END = 11880;
 const WIN = [[-9, 14, 1], [130, 172, 4], [185, 200, 4], [540, 560, 5], [9850, 10220, 120], [11700, 11880, 20]];

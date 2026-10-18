@@ -530,7 +530,8 @@ labels(LABELS, { L: -190, R: 190 });
 // MISSION
 // =====================================================================================
 const MISSION = String.raw`
-const LANDING = { id: "f9", at: 541 }; // 3-D booster landing view
+// 3-D views: booster landing, ISS docking, entry, splashdown (at = MAP times below: 541, tDock, tD + 2300, tSplash)
+const LANDINGS = [{ id: "f9", at: 541 }, { id: "dock", at: 100800 }, { id: "dentry", at: 100800 + 180 * 86400 + 54000 + 2300 }, { id: "dsplash", at: 100800 + 180 * 86400 + 54000 + 3150 }];
 // ---- Crew Dragon ascent (a Crew rotation flight), time-warped
 const T_START = -6, T_END = 760;
 const WIN = [[-6, 14, 1], [140, 175, 4], [520, 540, 6], [700, 760, 12]];

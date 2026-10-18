@@ -291,7 +291,7 @@ vec4 mv = viewMatrix * wp; vV = normalize(-mv.xyz); gl_Position = projectionMatr
 uniform vec3 c; uniform float p; uniform vec3 sunW; varying vec3 vN; varying vec3 vV; varying vec3 vW;
 void main() {
 #include <logdepthbuf_fragment>
-float f = pow(1.0 - max(dot(vN, vV), 0.0), p); float day = smoothstep(-0.3, 0.3, dot(vW, sunW));
+float f = pow(clamp(1.0 - dot(vN, vV), 0.0, 1.0), p); float day = smoothstep(-0.3, 0.3, dot(vW, sunW));
 gl_FragColor = vec4(c * f * day, 1.0); }`,
         blending: THREE.AdditiveBlending, transparent: true, depthWrite: false,
       });
@@ -380,7 +380,7 @@ gl_FragColor = vec4(c * f * day, 1.0); }`,
 
     const steelTex = () => once("steel", () => tex(512, 1024, (g, w, hh) => {
       g.fillStyle = "#d4d8dd"; g.fillRect(0, 0, w, hh);
-      g.strokeStyle = "rgba(70,74,80,.45)"; g.lineWidth = 2;
+      g.strokeStyle = "rgba(70,74,80,.2)"; g.lineWidth = 2;
       for (let y = 0; y < hh; y += hh / 36) { g.beginPath(); g.moveTo(0, y); g.lineTo(w, y); g.stroke(); }
       const r = rng(4);
       for (let i = 0; i < 160; i++) { const y = r() > 0.5 ? r() * 90 : hh - r() * 140; g.fillStyle = "rgba(40,34,28," + 0.15 * r() + ")"; g.fillRect(r() * w, y, 4 + 20 * r(), 10 + 60 * r()); }
@@ -413,9 +413,9 @@ gl_FragColor = vec4(c * f * day, 1.0); }`,
         }
       }));
       const skin = std("#ffffff", { map: t, metalness: 0.55, roughness: 0.32 }), dark = std("#1b1c1f", { roughness: 0.55, metalness: 0.3 }), engMat = std("#3b3d42", { metalness: 0.75, roughness: 0.3, side: THREE.DoubleSide });
-      cyl(4.5, 4.5, 1.6, 40, skin, body, 96);
+      const hull = [cyl(4.5, 4.5, 1.6, 40, skin, body, 96)];
       const nose = []; for (let i = 0; i <= 18; i++) { const f = i / 18; nose.push([4.5 * Math.pow(Math.max(0, 1 - f * f), 0.55), 40 + 10.3 * f]); }
-      lathe(nose, skin, body, 96);
+      hull.push(lathe(nose, skin, body, 96));
       cyl(4.56, 4.56, 0, 1.6, dark, body, 96);
       const flaps = [];
       for (const [y, h, w, th] of [[45, 6, 2.6, 0.32], [7.5, 9.5, 3.4, 0.45]]) for (const s of [-1, 1]) {
@@ -428,7 +428,7 @@ gl_FragColor = vec4(c * f * day, 1.0); }`,
       for (let i = 0; i < 3; i++) { const a = (i * TAU) / 3, b = a + Math.PI / 3; mesh(rsl, engMat, body, Math.cos(a) * 1.1, -0.2, Math.sin(a) * 1.1); fires.push(plume(body, Math.cos(a) * 1.1, -0.95, Math.sin(a) * 1.1, 0.6, 34, "#8fb6ff", { spread: 2 })); mesh(rvac, engMat, body, Math.cos(b) * 3, -0.6, Math.sin(b) * 3); }
       const door = box(0.25, 4.8, 3.6, std("#050506", { roughness: 0.9 }), body, -4.42, 30.5, 0);
       for (const s of [-1, 1]) box(1.0, 0.6, 1.0, dark, body, 0, 41, s * 5.0); // catch pins
-      return { root, body, fires, door, flaps: (k, c) => flaps.forEach(([pv, s], i) => (pv.rotation.y = s * (k + 0.06 * Math.sin(c * 2 + i)))) };
+      return { root, body, hull, fires, door, flaps: (k, c) => flaps.forEach(([pv, s], i) => (pv.rotation.y = s * (k + 0.06 * Math.sin(c * 2 + i)))) };
     }
 
     function crewDragon({ trunk = true } = {}) {
@@ -608,21 +608,93 @@ gl_FragColor = vec4(c * f * day, 1.0); }`,
     }
 
     // entry plasma: a shock layer hugging the heat shield (capsule frame) and a wake + ablation sparks streaming behind (flow frame, +y = downstream)
+    // ---- entry plasma (world frame; F = the downstream direction)
+    const LOGV = "#include <common>\n#include <logdepthbuf_pars_vertex>\n", LOGF = "#include <common>\n#include <logdepthbuf_pars_fragment>\n";
+    // ribbons of glowing gas that peel off the windward edges and stream downstream, white-hot at the hull, cooling to c2
+    function streaks(seeds, { F, len, spread, w, c1, c2, per = 2, k = 3 }) {
+      const S = 28, pos = [], out = [], uu = [], side = [], seed = [], idx = [];
+      let v = 0;
+      for (const sd of seeds) for (let j = 0; j < per; j++) {
+        const r = Math.random();
+        for (let i = 0; i <= S; i++) for (const sg of [-1, 1]) { pos.push(sd.p.x, sd.p.y, sd.p.z); out.push(sd.out.x, sd.out.y, sd.out.z); uu.push((i / S) ** 1.6); side.push(sg); seed.push(r); }
+        for (let i = 0; i < S; i++) { const a = v + i * 2; idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); }
+        v += (S + 1) * 2;
+      }
+      const geo = new THREE.BufferGeometry(), at = (n, a, c) => geo.setAttribute(n, new THREE.Float32BufferAttribute(a, c));
+      at("position", pos, 3); at("aOut", out, 3); at("aU", uu, 1); at("aSide", side, 1); at("aSeed", seed, 1); geo.setIndex(idx);
+      const uni = { uF: { value: F.clone().normalize() }, uLen: { value: len }, uSpread: { value: spread }, uW: { value: w }, uT: { value: 0 }, uP: { value: 1 }, uC1: { value: new THREE.Color(c1).multiplyScalar(k) }, uC2: { value: new THREE.Color(c2).multiplyScalar(k) } };
+      const m = new THREE.Mesh(geo, new THREE.ShaderMaterial({
+        uniforms: uni, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
+        vertexShader: LOGV + `attribute vec3 aOut; attribute float aU, aSide, aSeed;
+uniform vec3 uF; uniform float uLen, uSpread, uW, uT;
+varying float vU, vS, vSeed;
+vec3 sn(vec3 v) { float l = length(v); return l > 1e-5 ? v / l : vec3(0.0, 1.0, 0.0); }
+void main() {
+  float u = aU, l = uLen * (0.45 + 0.8 * aSeed);
+  vec3 cr = sn(cross(uF, aOut));
+  vec3 p = position + uF * l * u + aOut * uSpread * pow(max(u, 1e-4), 1.3) * (0.4 + aSeed)
+         + cr * sin(u * 5.0 + aSeed * 40.0 + uT * 2.5) * uSpread * 0.18 * u;
+  vec3 sd = sn(cross(uF, sn(cameraPosition - p)));
+  p += sd * aSide * uW * (0.3 + 1.6 * u) * (0.5 + 0.8 * aSeed);
+  vU = u; vS = aSide; vSeed = aSeed;
+  gl_Position = projectionMatrix * viewMatrix * vec4(p, 1.0);
+#include <logdepthbuf_vertex>
+}`,
+        fragmentShader: LOGF + `uniform vec3 uC1, uC2; uniform float uT, uP; varying float vU, vS, vSeed;
+void main() {
+#include <logdepthbuf_fragment>
+  float edge = max(0.0, 1.0 - vS * vS);
+  float fade = pow(clamp(1.0 - vU, 0.0, 1.0), 2.4) * smoothstep(0.0, 0.03, vU);
+  float st = 0.8 + 0.2 * sin(vU * 9.0 - uT * 14.0 + vSeed * 60.0);
+  vec3 col = mix(vec3(max(uC1.r, max(uC1.g, uC1.b))) * 1.2, uC1, smoothstep(0.0, 0.12, vU));
+  col = mix(col, uC2, smoothstep(0.12, 0.75, vU));
+  gl_FragColor = vec4(col * edge * fade * st * uP * (0.6 + 0.4 * vSeed), 1.0);
+}`,
+      }));
+      m.frustumCulled = false; world.add(m);
+      return (p, t) => { uni.uP.value = p; uni.uT.value = t; m.visible = p > 0.01; };
+    }
+    // a thin glowing layer just off a hull surface: brightest where it faces the flow and at its silhouette
+    function hotShell(src, F, c, k = 2.5, d = 0.25) {
+      const g = src.geometry.clone(), P = g.attributes.position, N = g.attributes.normal;
+      for (let i = 0; i < P.count; i++) if (Number.isFinite(N.getX(i) + N.getY(i) + N.getZ(i))) P.setXYZ(i, P.getX(i) + N.getX(i) * d, P.getY(i) + N.getY(i) * d, P.getZ(i) + N.getZ(i) * d);
+      const uni = { uF: { value: F.clone().normalize() }, uC: { value: new THREE.Color(c).multiplyScalar(k) }, uP: { value: 1 }, uT: { value: 0 } };
+      const m = new THREE.Mesh(g, new THREE.ShaderMaterial({
+        uniforms: uni, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+        vertexShader: LOGV + `varying vec3 vN, vV, vW;
+void main() { vec4 wp = modelMatrix * vec4(position, 1.0); vec3 n = mat3(modelMatrix) * normal; vN = length(n) > 1e-5 ? normalize(n) : vec3(0.0, 1.0, 0.0); vW = wp.xyz; vV = normalize(cameraPosition - wp.xyz);
+gl_Position = projectionMatrix * viewMatrix * wp;
+#include <logdepthbuf_vertex>
+}`,
+        fragmentShader: LOGF + `uniform vec3 uF, uC; uniform float uP, uT; varying vec3 vN, vV, vW;
+void main() {
+#include <logdepthbuf_fragment>
+  float wind = smoothstep(-0.2, 0.8, dot(vN, -uF));
+  float fr = pow(clamp(1.0 - abs(dot(vN, vV)), 0.0, 1.0), 2.2);
+  float fl = 0.85 + 0.15 * sin(dot(vW, vec3(2.1, 3.3, 1.7)) + uT * 18.0);
+  gl_FragColor = vec4(uC * wind * wind * (0.03 + 2.6 * fr * fr * fr) * fl * uP, 1.0);
+}`,
+      }));
+      m.position.copy(src.position); m.rotation.copy(src.rotation); m.scale.copy(src.scale); src.parent.add(m);
+      return (p, t) => { uni.uP.value = p; uni.uT.value = t; m.visible = p > 0.01; };
+    }
+    // capsule entry: shock layer on the heat shield, streaks off its rim, ablation sparks (flowFrame: +y = downstream)
     function plasma(capFrame, flowFrame, R, len, hot) {
       const shock = mesh(new THREE.SphereGeometry(R * 1.12, 64, 16, 0, TAU, Math.PI / 2, Math.PI / 2), glow(hot, 2.6, { opacity: 0.8 }), capFrame, 0, -0.08, 0); shock.scale.y = 0.3; shock.castShadow = false;
       const core = new THREE.Sprite(new THREE.SpriteMaterial({ map: dotTex, color: new THREE.Color(hot).multiplyScalar(1.6), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true })); core.scale.setScalar(R * 3.2); core.position.y = -0.3; capFrame.add(core);
-      const sleeve = (r0, r1, k, o, l) => { const m = new THREE.Mesh(new THREE.CylinderGeometry(r0, r1, 1, 64, 1, true).translate(0, -0.5, 0).rotateX(Math.PI), glow(hot, k, { map: plumeTex, opacity: o })); m.scale.y = l; flowFrame.add(m); return m; };
-      const w1 = sleeve(R * 1.08, R * 2.2, 1.3, 0.45, len), w2 = sleeve(R * 0.95, R * 1.3, 2, 0.4, len * 0.45), w3 = sleeve(R * 1.2, R * 3.2, 0.6, 0.14, len * 1.6);
+      capFrame.updateMatrixWorld(true); flowFrame.updateMatrixWorld(true);
+      const F = V3(0, 1, 0).transformDirection(flowFrame.matrixWorld), seeds = [];
+      for (let i = 0; i < 48; i++) { const a = (i / 48) * TAU; seeds.push({ p: capFrame.localToWorld(V3(Math.cos(a) * R, 0.08, Math.sin(a) * R)), out: V3(Math.cos(a), 0, Math.sin(a)).transformDirection(capFrame.matrixWorld) }); }
+      const tr = streaks(seeds, { F, len: len * 2.4, spread: R * 1.8, w: R * 0.06, c1: hot, c2: "#ff3d7a", per: 1, k: 1.1 });
       const N = 500, pos = new Float32Array(N * 3), ph = Array.from({ length: N }, () => [Math.random(), Math.random() * TAU, 1 + Math.random()]);
       const geo = new THREE.BufferGeometry(); geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
-      const sparks = new THREE.Points(geo, new THREE.PointsMaterial({ color: new THREE.Color("#ffc890").multiplyScalar(3), size: R * 0.09, map: dotTex, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
+      const sparks = new THREE.Points(geo, new THREE.PointsMaterial({ color: new THREE.Color("#ffc890").multiplyScalar(3), size: R * 0.07, map: dotTex, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
       sparks.frustumCulled = false; flowFrame.add(sparks);
       return (p, c) => {
-        for (const m of [shock, core, w1, w2, w3, sparks]) m.visible = p > 0.01;
+        for (const m of [shock, core, sparks]) m.visible = p > 0.01;
         const f = 0.92 + 0.08 * Math.random();
         shock.material.opacity = 0.8 * p * f; core.material.opacity = 0.7 * p * f;
-        w1.material.opacity = 0.45 * p * f; w2.material.opacity = 0.4 * p; w3.material.opacity = 0.14 * p * f;
-        w1.scale.y = len * (0.85 + 0.15 * p); w3.scale.y = len * 1.6 * (0.9 + 0.1 * Math.sin(c * 9));
+        tr(p, c);
         for (let i = 0; i < N; i++) { const [a, b, sp] = ph[i], u = (a + c * 0.9 * sp) % 1, rr = R * (1.05 + 1.6 * u) * (0.6 + 0.4 * Math.sin(b * 7)); pos.set([Math.cos(b + u) * rr, u * len * 1.6, Math.sin(b + u) * rr], i * 3); }
         geo.attributes.position.needsUpdate = true;
       };
@@ -861,21 +933,27 @@ gl_FragColor = vec4(c * f * day, 1.0); }`,
         const E = planet("earth", 78e3, { spot: [0.55, 0.42], speed: 7000 });
         const v = starshipShip(); world.add(v.root);
         v.body.position.y = -25; v.root.rotation.z = -30 * D2R; // nose up ~60° from the flight path, belly into the flow
-        const hot = "#ff5a9a", warm = "#ff8a3a", flow = new THREE.Group(); flow.rotation.z = Math.PI / 2; world.add(flow);
-        const sheet = mesh(new THREE.CylinderGeometry(5.0, 5.0, 50, 64, 1, true, 0, Math.PI), glow(warm, 1.5, { opacity: 0.4 }), v.body, 0, 26, 0); sheet.castShadow = false;
-        const sheet2 = mesh(new THREE.CylinderGeometry(6.2, 6.2, 54, 64, 1, true, 0.2, Math.PI - 0.4), glow(hot, 1.2, { opacity: 0.25 }), v.body, 0.8, 26, 0); sheet2.castShadow = false;
-        const wake = [];
-        for (const [r0, r1, k, o, l] of [[12, 26, 1.1, 0.24, 120], [7, 12, 2.2, 0.32, 50], [18, 50, 0.6, 0.07, 220]]) { const m = new THREE.Mesh(new THREE.CylinderGeometry(r0, r1, 1, 64, 1, true).translate(0, -0.5, 0).rotateX(Math.PI), glow(hot, k, { map: plumeTex, opacity: o })); m.scale.y = l; flow.add(m); wake.push([m, o]); }
+        sun.intensity = 1.2; hemi.intensity = 0.15; // dim: the plasma is the main light on the hull
+        v.root.updateMatrixWorld(true);
+        const F = V3(-1, 0.05, 0).normalize(), L = (x, y, z) => v.body.localToWorld(V3(x, y, z)), D = (x, z) => V3(x, 0, z).transformDirection(v.body.matrixWorld);
+        const shells = v.hull.map((m) => hotShell(m, F, "#ffa6d6", 3.4, 0.3));
+        // streak seeds: the two belly edges, round the nose, the flap tips and the aft skirt
+        const seeds = [], rAt = (y) => (y > 40 ? 4.5 * Math.pow(Math.max(0, 1 - ((y - 40) / 10.3) ** 2), 0.55) : 4.5);
+        for (let i = 0; i < 44; i++) { const y = 2 + 47 * Math.random(), a = (Math.random() < 0.5 ? -1 : 1) * (1.15 + 0.3 * Math.random()); seeds.push({ p: L(Math.cos(a) * rAt(y), y, Math.sin(a) * rAt(y)), out: D(Math.cos(a), Math.sin(a)) }); }
+        for (let a = -1.2; a <= 1.2; a += 0.2) seeds.push({ p: L(Math.cos(a) * 1.4, 49.6, Math.sin(a) * 1.4), out: D(Math.cos(a), Math.sin(a)).add(V3(0, 0.5, 0)).normalize() });
+        for (const [y, z] of [[42, 7.2], [48, 6.6], [3, 8.2], [12, 8.0]]) for (const sg of [-1, 1]) for (let k = 0; k < 2; k++) seeds.push({ p: L(1.3, y + k * 1.2, sg * z), out: D(0.3, sg) });
+        const tr = streaks(seeds, { F, len: 90, spread: 10, w: 0.42, c1: "#ffa0d4", c2: "#5a4cff", per: 2, k: 0.9 });
+        const pl = new THREE.PointLight("#ff6fae", 700, 160, 2); pl.position.copy(L(9, 26, 0)); world.add(pl);
         let c = 0;
         return {
-          chase: [50, 12, 62], focus: 0, shadow: 60, sunDir, space: true, spin: 0.004,
+          chase: [24, 16, 72], focus: 0, shadow: 60, sunDir, space: true, spin: 0.004,
           events: [[0, "Belly-first at ~60° angle of attack · 7 km/s"], [10, "Plasma wraps the hexagonal heat-shield tiles"], [30, "Peak heating · ~1,400 °C on the windward side"], [50, "Flaps trim the attitude like a skydiver's arms and legs"]],
           place: () => ({ pos: V3(0, 0, 0) }),
           update(t, s, dt) {
             c += dt; E.set(t); v.flaps(0.15, c);
-            const p = lin([[0, 0.7], [30, 1], [70, 0.85]], t), f = 0.92 + 0.08 * Math.random();
-            sheet.material.opacity = 0.4 * p * f; sheet2.material.opacity = 0.25 * p * f;
-            for (const [m, o] of wake) m.material.opacity = o * p * f;
+            const p = lin([[0, 0.7], [30, 1], [70, 0.85]], t), f = 0.94 + 0.06 * Math.random();
+            shells.forEach((sh) => sh(p * f, c)); tr(p, c);
+            pl.intensity = 700 * p * f;
           },
         };
       },

@@ -1,0 +1,1 @@
+[["wait",400],["eval","document.querySelector('[data-act=labels]').click()"],["shot","shots/saturnv-st.png",".iso-plate",1],["shot","shots/saturnv-stz.png",".stage",2.5,[300,300,260,300]]]

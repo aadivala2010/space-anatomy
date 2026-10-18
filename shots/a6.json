@@ -1,0 +1,7 @@
+[["move",".stage",0.5,0.62],["wait",100],["eval","'hover:'+document.querySelector('.stage').hasAttribute('data-hot')"],
+ ["move",".stage",0.9,0.62],["wait",100],["eval","'after leaving part:'+document.querySelector('.stage').hasAttribute('data-hot')"],
+ ["drag",".stage",0.5,0.62,0.9,0.4],["wait",100],["eval","'after drag:'+document.querySelector('.stage').hasAttribute('data-hot')+' card:'+!document.querySelector('.pop').hidden"],
+ ["click","[data-act=reset]"],["click","[data-row=rs25]"],["wait",200],["eval","'row click card:'+!document.querySelector('.pop').hidden+' '+document.querySelector('.pop-name').textContent"],
+ ["click","[data-row=icps-rl10]"],["wait",200],["eval","'cut on:'+document.querySelector('.stage').hasAttribute('data-cut')+' '+document.querySelector('.pop-name').textContent"],
+ ["key","e"],["wait",200],["eval","'card after explode hidden:'+document.querySelector('.pop').hidden"],
+ ["key","Escape"],["eval","'esc hot:'+document.querySelector('.stage').hasAttribute('data-hot')"]]

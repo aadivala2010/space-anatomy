@@ -1,0 +1,3 @@
+[["click","[data-act=launch]"],["wait",4000],["shot","shots/f-ign.png",".iso-plate",1],
+ ["eval","document.querySelector('[data-met]').textContent"],
+ ["wait",5000],["shot","shots/f-lift.png",".iso-plate",1],["eval","document.querySelector('[data-met]').textContent+' '+document.querySelector('[data-alt]').textContent"]]

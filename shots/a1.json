@@ -1,0 +1,1 @@
+[["key","e"],["wait",3500],["eval","document.querySelector('.rk-svg').getAttribute('viewBox') + ' | ' + JSON.stringify(document.querySelector('.rk-svg').getBoundingClientRect()) + ' | ' + JSON.stringify(document.querySelector('.stage').getBoundingClientRect())"]]

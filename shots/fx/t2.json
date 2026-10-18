@@ -1,0 +1,8 @@
+[["wait",400],["eval","FXfixed=true;FX.scale=1"],
+ ["eval","__seek(1.5, 7)"],["wait",200],["shot","shots/fx/c1.png",".stage",1],
+ ["eval","__seek(6, 9)"],["wait",200],["shot","shots/fx/c6.png",".stage",1],
+ ["eval","__seek(20, 11)"],["wait",200],["shot","shots/fx/c20.png",".stage",1],
+ ["eval","__seek(-3, 5)"],["wait",200],["shot","shots/fx/c-3.png",".stage",2,[250,450,400,250]],
+ ["eval","__seek(1.5, 7)"],["wait",200],["shot","shots/fx/z1.png",".stage",2,[250,450,400,250]],
+ ["eval","__seek(10, 7)"],["wait",200],["shot","shots/fx/z10.png",".stage",2,[250,380,400,320]]
+]

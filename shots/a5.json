@@ -1,0 +1,7 @@
+[["eval","document.querySelector('.rk-svg').getAttribute('viewBox')"],
+ ["drag",".stage",0.5,0.5,0.7,0.6],["wait",200],["eval","document.querySelector('.rk-svg').getAttribute('viewBox')"],
+ ["click","[data-act=zin]"],["wait",100],["eval","document.querySelector('.rk-svg').getAttribute('viewBox')"],
+ ["key","e"],["wait",3000],["eval","document.querySelector('.rk-svg').getAttribute('viewBox')"],
+ ["key","0"],["wait",100],["eval","document.querySelector('.rk-svg').getAttribute('viewBox')"],
+ ["key","e"],["wait",3000],["eval","document.querySelector('.rk-svg').getAttribute('viewBox')"],
+ ["shot","shots/cam.png",".iso-plate",1]]

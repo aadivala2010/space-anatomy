@@ -1,0 +1,5 @@
+[["wait",400],["eval","FXfixed=true;FX.scale=1"],
+ ["eval","__seek(2, 7)"],["wait",200],["shot","OUT-a.png",".iso-plate",1],
+ ["eval","__seek(9, 7)"],["wait",200],["shot","OUT-b.png",".iso-plate",1],
+ ["eval","__seek(-2, 7)"],["wait",200],["shot","OUT-c.png",".iso-plate",1]
+]

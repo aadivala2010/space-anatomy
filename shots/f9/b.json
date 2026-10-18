@@ -1,0 +1,5 @@
+[["wait",400],["eval","document.querySelector('[data-act=labels]').click()"],
+ ["shot","shots/f9/z-top.png",".stage",4,[360,230,120,150]],
+ ["shot","shots/f9/z-mid.png",".stage",4,[360,380,120,110]],
+ ["shot","shots/f9/z-bot.png",".stage",3,[330,560,170,140]]
+]

@@ -1,0 +1,9 @@
+[["click","[data-act=launch]"],["wait",300],["click","[data-fl=play]"],
+ ["eval","window.__go=(t)=>{const s=document.querySelector('.fbar input');let lo=0,hi=1000;for(let i=0;i<20;i++){const m=(lo+hi)/2;s.value=m;s.dispatchEvent(new Event('input'));const met=document.querySelector('[data-met]').textContent;const [h,mi,se]=met.slice(2).split(':').map(Number);const v=(met[1]==='−'?-1:1)*(h*3600+mi*60+se);if(v<t)lo=m;else hi=m;}return document.querySelector('[data-met]').textContent};1"],
+ ["eval","__go(8)"],["wait",500],["shot","shots/f-8.png",".iso-plate",1],
+ ["eval","__go(70)"],["wait",500],["shot","shots/f-70.png",".iso-plate",1],
+ ["eval","__go(150)"],["wait",500],["shot","shots/f-150.png",".iso-plate",1],
+ ["eval","__go(230)"],["wait",500],["shot","shots/f-230.png",".iso-plate",1],
+ ["eval","__go(530)"],["wait",500],["shot","shots/f-530.png",".iso-plate",1],
+ ["eval","__go(6600)"],["wait",500],["shot","shots/f-6600.png",".iso-plate",1],
+ ["eval","__go(12600)"],["wait",500],["shot","shots/f-end.png",".iso-plate",1]]

@@ -1,0 +1,13 @@
+[["wait",400],["shot","shots/f9/static.png",".iso-plate",1],
+ ["key","c"],["wait",300],["shot","shots/f9/cut.png",".iso-plate",1],["key","c"],
+ ["key","e"],["wait",2800],["shot","shots/f9/apart.png",".iso-plate",1],["key","e"],["wait",2800],
+ ["eval","FXfixed=true;FX.scale=1"],
+ ["eval","__seek(-2.7, 3)"],["wait",200],["shot","shots/f9/ign.png",".iso-plate",1],
+ ["eval","__seek(2, 5)"],["wait",200],["shot","shots/f9/t2.png",".iso-plate",1],
+ ["eval","__seek(14, 7)"],["wait",200],["shot","shots/f9/t14.png",".iso-plate",1],
+ ["eval","__seek(64, 8)"],["wait",200],["shot","shots/f9/t64.png",".iso-plate",1],
+ ["eval","__seek(140, 9)"],["wait",200],["shot","shots/f9/t140.png",".iso-plate",1],
+ ["eval","__seek(172, 10)"],["wait",200],["shot","shots/f9/t172.png",".iso-plate",1],
+ ["eval","__seek(400, 11)"],["wait",200],["shot","shots/f9/t400.png",".iso-plate",1],
+ ["eval","__seek(745, 12)"],["wait",200],["shot","shots/f9/t745.png",".iso-plate",1]
+]

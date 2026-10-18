@@ -1,0 +1,1 @@
+[["wait",500],["shot","shots/fx/light-static.png",".iso-plate",1],["eval","FXfixed=true;FX.scale=1"],["eval","__seek(4, 7)"],["wait",200],["shot","shots/fx/light-fl.png",".iso-plate",1]]

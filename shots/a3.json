@@ -1,0 +1,1 @@
+[["key","e"],["wait",3200],["eval","document.querySelector('.rk-svg').getAttribute('viewBox')"]]

@@ -1,0 +1,5 @@
+[["wait",400],["shot","shots/fx/static.png",".iso-plate",1],["eval","FXfixed=true;FX.scale=1"],
+ ["eval","__seek(3, 7)"],["wait",200],["shot","shots/fx/r3.png",".iso-plate",1],
+ ["eval","__seek(150, 9)"],["wait",200],["shot","shots/fx/r150.png",".iso-plate",1],
+ ["eval","__seek(520, 9)"],["wait",200],["shot","shots/fx/r520.png",".iso-plate",1]
+]

@@ -1,0 +1,12 @@
+[["wait",500],["eval","FXfixed=true;FX.scale=1"],
+ ["eval","__seek(-7.5, 3)"],["wait",300],["shot","shots/fx/t-7.png",".iso-plate",1],
+ ["eval","__seek(-2, 5)"],["wait",300],["shot","shots/fx/t-2.png",".iso-plate",1],
+ ["eval","__seek(1.5, 7)"],["wait",300],["shot","shots/fx/t1.png",".iso-plate",1],
+ ["eval","__seek(6, 9)"],["wait",300],["shot","shots/fx/t6.png",".iso-plate",1],
+ ["eval","__seek(14, 11)"],["wait",300],["shot","shots/fx/t14.png",".iso-plate",1],
+ ["eval","__seek(58, 12)"],["wait",300],["shot","shots/fx/t58.png",".iso-plate",1],
+ ["eval","__seek(118, 13)"],["wait",300],["shot","shots/fx/t118.png",".iso-plate",1],
+ ["eval","__seek(133, 14)"],["wait",300],["shot","shots/fx/t133.png",".iso-plate",1],
+ ["eval","__seek(300, 15)"],["wait",300],["shot","shots/fx/t300.png",".iso-plate",1],
+ ["eval","__seek(6600, 16)"],["wait",300],["shot","shots/fx/t6600.png",".iso-plate",1]
+]

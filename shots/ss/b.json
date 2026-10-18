@@ -1,0 +1,8 @@
+[["wait",400],["shot","shots/ss/static.png",".iso-plate",1],["eval","document.querySelector('[data-act=labels]').click()"],
+ ["shot","shots/ss/z-top.png",".stage",3,[340,160,150,200]],
+ ["shot","shots/ss/z-mid.png",".stage",3,[340,330,150,150]],
+ ["shot","shots/ss/z-bot.png",".stage",2.5,[300,560,220,160]],
+ ["eval","FXfixed=true;FX.scale=1"],
+ ["eval","__seek(3, 5)"],["wait",200],["shot","shots/ss/t3.png",".iso-plate",1],
+ ["eval","__seek(162.5, 9)"],["wait",200],["shot","shots/ss/hs.png",".iso-plate",1]
+]

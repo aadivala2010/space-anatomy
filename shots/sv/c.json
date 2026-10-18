@@ -1,0 +1,1 @@
+[["wait",400],["eval","FXfixed=true;FX.scale=1"],["eval","__seek(11800, 12)"],["wait",200],["shot","shots/sv/csm.png",".iso-plate",1]]

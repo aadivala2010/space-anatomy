@@ -1,0 +1,506 @@
+{
+ "las-nose": {
+  "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/1/1c/EFT-1_Orion_in_fairing_and_with_mock-LAS.jpg/960px-EFT-1_Orion_in_fairing_and_with_mock-LAS.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+  "page": "https://commons.wikimedia.org/wiki/File:EFT-1_Orion_in_fairing_and_with_mock-LAS.jpg",
+  "caption": "EFT-1 Orion in fairing and with mock-LAS",
+  "lic": "Public domain",
+  "credit": "NASA"
+ },
+ "las-acm": {
+  "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/4/4d/Artemis_II_Launch_Abort_Motor_Progress_%28KSC-20211117-PH-JBS02-0002%29.jpg/960px-Artemis_II_Launch_Abort_Motor_Progress_%28KSC-20211117-PH-JBS02-0002%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+  "page": "https://commons.wikimedia.org/wiki/File:Artemis_II_Launch_Abort_Motor_Progress_(KSC-20211117-PH-JBS02-0002).jpg",
+  "caption": "Artemis II Launch Abort Motor Progress",
+  "lic": "Public domain",
+  "credit": "NASA Kennedy Space Center / NASA/John Smegel ky"
+ },
+ "las-jettison": {
+  "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/4/4b/Orionjettison.jpg/960px-Orionjettison.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+  "page": "https://commons.wikimedia.org/wiki/File:Orionjettison.jpg",
+  "caption": "Orionjettison",
+  "lic": "Public domain",
+  "credit": "NASA"
+ },
+ "las-abort": {
+  "src": "https://upload.wikimedia.org/wikipedia/commons/e/e3/Ascent_Abort-2.png?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail_unscaled",
+  "page": "https://commons.wikimedia.org/wiki/File:Ascent_Abort-2.png",
+  "caption": "Ascent Abort-2",
+  "lic": "Public domain",
+  "credit": "National Aeronautic  and Space Admini tration (NASA)"
+ },
+ "las-ogive": {
+  "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/1/1f/Artemis_II_On_PAD_B_%28KSC-20260120-PH-FMX01_0013%29.jpg/960px-Artemis_II_On_PAD_B_%28KSC-20260120-PH-FMX01_0013%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+  "page": "https://commons.wikimedia.org/wiki/File:Artemis_II_On_PAD_B_(KSC-20260120-PH-FMX01_0013).jpg",
+  "caption": "Artemis II On PAD B",
+  "lic": "Public domain",
+  "credit": "NASA Kennedy Space Center / NASA/Frank Michaux"
+ },
+ "cm-shield": {
+  "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/5/59/Artemis_I_Orion_heat_shield.jpg/960px-Artemis_I_Orion_heat_shield.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+  "page": "https://commons.wikimedia.org/wiki/File:Artemis_I_Orion_heat_shield.jpg",
+  "caption": "Artemis I Orion heat shield",
+  "lic": "Public domain",
+  "credit": "NASA"
+ },
+ "cm-backshell": {
+  "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/d/db/Artemis_II_Orion_Crew_Module_at_KSC_%28jsc2022e046255%29.jpg/960px-Artemis_II_Orion_Crew_Module_at_KSC_%28jsc2022e046255%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+  "page": "https://commons.wikimedia.org/wiki/File:Artemis_II_Orion_Crew_Module_at_KSC_(jsc2022e046255).jpg",
+  "caption": "Artemis II Orion Crew Module at KSC",
+  "lic": "Public domain",
+  "credit": "NASA John on Space Center / NASA/Kim Shiflett"
+ },
+ "cm-windows": {
+  "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/6/6d/Window_to_the_World_%28art002e025469%29.jpg/960px-Window_to_the_World_%28art002e025469%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+  "page": "https://commons.wikimedia.org/wiki/File:Window_to_the_World_(art002e025469).jpg",
+  "caption": "Window to the World",
+  "lic": "Public domain",
+  "credit": "NASA John on Space Center / NASA"
+ },
+ "cm-hatch": {
+  "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/5/53/Artemis_II_Orion_Interior_%2853640723010%29.jpg/960px-Artemis_II_Orion_Interior_%2853640723010%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+  "page": "https://commons.wikimedia.org/wiki/File:Artemis_II_Orion_Interior_(53640723010).jpg",
+  "caption": "Artemis II Orion Interior",
+  "lic": "Public domain",
+  "credit": "NASA Orion Spacecraft"
+ },
+ "cm-docking": {
+  "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/0/06/Artemis_II_Orion_Crew_Module_at_KSC_%28jsc2022e046256%29.jpg/960px-Artemis_II_Orion_Crew_Module_at_KSC_%28jsc2022e046256%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+  "page": "https://commons.wikimedia.org/wiki/File:Artemis_II_Orion_Crew_Module_at_KSC_(jsc2022e046256).jpg",
+  "caption": "Artemis II Orion Crew Module at KSC",
+  "lic": "Public domain",
+  "credit": "NASA John on Space Center / NASA/Kim Shiflett"
+ },
+ "cm-rcs": {
+  "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/a/ab/Bound_for_Home_%28art002e031476%29.jpg/960px-Bound_for_Home_%28art002e031476%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+  "page": "https://commons.wikimedia.org/wiki/File:Bound_for_Home_(art002e031476).jpg",
+  "caption": "Bound for Home",
+  "lic": "Public domain",
+  "credit": "NASA John on Space Center / NASA"
+ },
+ "cm-cabin": {
+  "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/b/b8/Orion_Window_Moment_Captured_%28art002e025643%29.jpg/960px-Orion_Window_Moment_Captured_%28art002e025643%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+  "page": "https://commons.wikimedia.org/wiki/File:Orion_Window_Moment_Captured_(art002e025643).jpg",
+  "caption": "Orion Window Moment Captured",
+  "lic": "Public domain",
+  "credit": "NASA John on Space Center / NASA"
+ },
+ "cm-seats": {
+  "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/9/98/Mannequin_%E2%80%9CMoonikin_Campos%E2%80%9D_secured_in_a_seat_inside_the_Artemis_I_Orion_crew_module.jpg/960px-Mannequin_%E2%80%9CMoonikin_Campos%E2%80%9D_secured_in_a_seat_inside_the_Artemis_I_Orion_crew_module.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+  "page": "https://commons.wikimedia.org/wiki/File:Mannequin_%E2%80%9CMoonikin_Campos%E2%80%9D_secured_in_a_seat_inside_the_Artemis_I_Orion_crew_module.jpg",
+  "caption": "Mannequin “Moonikin Campos” secured in a seat inside the Artemis I Orion crew module",
+  "lic": "Public domain",
+  "credit": "Frank Michaux"
+ },
+ "cm-chutes": {
+  "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/d/dc/Orion_Exploration_Flight_Test-1_crew_module_before_splashdown_2014.JPG/960px-Orion_Exploration_Flight_Test-1_crew_module_before_splashdown_2014.JPG?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+  "page": "https://commons.wikimedia.org/wiki/File:Orion_Exploration_Flight_Test-1_crew_module_before_splashdown_2014.JPG",
+  "caption": "Orion Exploration Flight Test-1 crew module before splashdown 2014",
+  "lic": "Public domain",
+  "credit": "U.S. Navy Photo by Ma  Communication Speciali t 1 t Cla  C"
+ },
+ "cma": {
+  "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/0/03/Technicians_with_NASA_and_Lockheed_Martin_fitted_three_spacecraft_adapter_jettison_fairing_panels_onto_the_service_module_of_the_agency%E2%80%99s_Orion%E2%80%99s_spacecraft_%28nasas-artemis-ii-orion-service-module-buttoned-up-for-launch%29.jpg/960px-thumbnail.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+  "page": "https://commons.wikimedia.org/wiki/File:Technicians_with_NASA_and_Lockheed_Martin_fitted_three_spacecraft_adapter_jettison_fairing_panels_onto_the_service_module_of_the_agency%E2%80%99s_Orion%E2%80%99s_spacecraft_(nasas-artemis-ii-orion-service-module-buttoned-up-for-launch).jpg",
+  "caption": "Technicians with NASA and Lockheed Martin fitted three spacecraft adapter jettison fairing panels onto the service module of the agency’s Orion’s spacecraft (nasas-artemis-ii-orion-service-module-buttoned-up-for-launch)",
+  "lic": "Public domain",
+  "credit": "NASA/Glenn Ben on"
+ },
+ "esm": {
+  "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/3/31/European_Service_Module_structural_test_article_2015.jpg/960px-European_Service_Module_structural_test_article_2015.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+  "page": "https://commons.wikimedia.org/wiki/File:European_Service_Module_structural_test_article_2015.jpg",
+  "caption": "European Service Module structural test article 2015",
+  "lic": "Public domain",
+  "credit": "NASA"
+ },
+ "esm-arrays": {
+  "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/c/cc/Artemis_II_Orion_Solar_Array_Wings_Installed_%28jsc2025e016293%29.jpg/960px-Artemis_II_Orion_Solar_Array_Wings_Installed_%28jsc2025e016293%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+  "page": "https://commons.wikimedia.org/wiki/File:Artemis_II_Orion_Solar_Array_Wings_Installed_(jsc2025e016293).jpg",
+  "caption": "Artemis II Orion Solar Array Wings Installed",
+  "lic": "Public domain",
+  "credit": "NASA John on Space Center / NASA/Rad Sinyak"
+ },
+ "esm-engine": {
+  "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/6/6b/Propulsion_Qualification_Module_Installed_at_White_Sands_Test_Fa_%28jsc2022e045186%29.jpg/960px-Propulsion_Qualification_Module_Installed_at_White_Sands_Test_Fa_%28jsc2022e045186%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+  "page": "https://commons.wikimedia.org/wiki/File:Propulsion_Qualification_Module_Installed_at_White_Sands_Test_Fa_(jsc2022e045186).jpg",
+  "caption": "Propulsion Qualification Module Installed at White Sands Test Fa",
+  "lic": "Public domain",
+  "credit": "NASA John on Space Center / NASA/Rad Sinyak"
+ },
+ "esm-aux": {
+  "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/7/7f/Propulsion_Qualification_Module_Installed_at_White_Sands_Test_Fa_%28jsc2022e045185%29.jpg/960px-Propulsion_Qualification_Module_Installed_at_White_Sands_Test_Fa_%28jsc2022e045185%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+  "page": "https://commons.wikimedia.org/wiki/File:Propulsion_Qualification_Module_Installed_at_White_Sands_Test_Fa_(jsc2022e045185).jpg",
+  "caption": "Propulsion Qualification Module Installed at White Sands Test Fa",
+  "lic": "Public domain",
+  "credit": "NASA John on Space Center / NASA/Rad Sinyak"
+ },
+ "esm-rcs": {
+  "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/d/de/Propulsion_Qualification_Module_Installed_at_White_Sands_Test_Fa_%28jsc2022e045181%29.jpg/960px-Propulsion_Qualification_Module_Installed_at_White_Sands_Test_Fa_%28jsc2022e045181%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+  "page": "https://commons.wikimedia.org/wiki/File:Propulsion_Qualification_Module_Installed_at_White_Sands_Test_Fa_(jsc2022e045181).jpg",
+  "caption": "Propulsion Qualification Module Installed at White Sands Test Fa",
+  "lic": "Public domain",
+  "credit": "NASA John on Space Center / NASA/Rad Sinyak"
+ },
+ "esm-tanks": {
+  "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/2/28/Propulsion_Qualification_Module_Installed_at_White_Sands_Test_Fa_%28jsc2022e045184%29.jpg/960px-Propulsion_Qualification_Module_Installed_at_White_Sands_Test_Fa_%28jsc2022e045184%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+  "page": "https://commons.wikimedia.org/wiki/File:Propulsion_Qualification_Module_Installed_at_White_Sands_Test_Fa_(jsc2022e045184).jpg",
+  "caption": "Propulsion Qualification Module Installed at White Sands Test Fa",
+  "lic": "Public domain",
+  "credit": "NASA John on Space Center / NASA/Rad Sinyak"
+ },
+ "sa": {
+  "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/9/90/Orion_Stage_Adapter_%28OSA%29_Secondary_Payload_Cubesat_%28KSC-20210805-PH-CSH01_0009%29.jpg/960px-Orion_Stage_Adapter_%28OSA%29_Secondary_Payload_Cubesat_%28KSC-20210805-PH-CSH01_0009%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+  "page": "https://commons.wikimedia.org/wiki/File:Orion_Stage_Adapter_(OSA)_Secondary_Payload_Cubesat_(KSC-20210805-PH-CSH01_0009).jpg",
+  "caption": "Orion Stage Adapter (OSA) Secondary Payload Cubesat",
+  "lic": "Public domain",
+  "credit": "NASA Kennedy Space Center / NASA/Cory S Hu ton"
+ },
+ "saj": {
+  "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/6/60/Artemis_I_Spacecraft_Adapter_Jettison_Fairing_Install_%28KSC-20201013-PH-FMX01_0076%29.jpg/960px-Artemis_I_Spacecraft_Adapter_Jettison_Fairing_Install_%28KSC-20201013-PH-FMX01_0076%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+  "page": "https://commons.wikimedia.org/wiki/File:Artemis_I_Spacecraft_Adapter_Jettison_Fairing_Install_(KSC-20201013-PH-FMX01_0076).jpg",
+  "caption": "Artemis I Spacecraft Adapter Jettison Fairing Install",
+  "lic": "Public domain",
+  "credit": "NASA Kennedy Space Center / NASA/Frank Michaux"
+ },
+ "osa": {
+  "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/8/80/Orion_Stage_Adapter_Flight_Hardware_Img_3329_1.jpg/960px-Orion_Stage_Adapter_Flight_Hardware_Img_3329_1.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+  "page": "https://commons.wikimedia.org/wiki/File:Orion_Stage_Adapter_Flight_Hardware_Img_3329_1.jpg",
+  "caption": "Orion Stage Adapter Flight Hardware Img 3329 1",
+  "lic": "Public domain",
+  "credit": "NASA"
+ },
+ "icps-lh2": {
+  "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/5/50/Second_stage_of_a_Delta_IV_Medium_rocket.jpg/960px-Second_stage_of_a_Delta_IV_Medium_rocket.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+  "page": "https://commons.wikimedia.org/wiki/File:Second_stage_of_a_Delta_IV_Medium_rocket.jpg",
+  "caption": "Second stage of a Delta IV Medium rocket",
+  "lic": "Public domain",
+  "credit": "NASA"
+ },
+ "icps-lox": {
+  "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/0/09/Delta_III_second_stage.jpg/960px-Delta_III_second_stage.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+  "page": "https://commons.wikimedia.org/wiki/File:Delta_III_second_stage.jpg",
+  "caption": "Delta III second stage",
+  "lic": "Public domain",
+  "credit": "NASA"
+ },
+ "icps-truss": {
+  "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/f/f9/Interim_Cryogenic_Propulsion_Stage.jpg/960px-Interim_Cryogenic_Propulsion_Stage.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+  "page": "https://commons.wikimedia.org/wiki/File:Interim_Cryogenic_Propulsion_Stage.jpg",
+  "caption": "Interim Cryogenic Propulsion Stage",
+  "lic": "Public domain",
+  "credit": "NASA Mar hall"
+ },
+ "icps-bottles": {
+  "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/5/50/Second_stage_of_a_Delta_IV_Medium_rocket.jpg/960px-Second_stage_of_a_Delta_IV_Medium_rocket.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+  "page": "https://commons.wikimedia.org/wiki/File:Second_stage_of_a_Delta_IV_Medium_rocket.jpg",
+  "caption": "Second stage of a Delta IV Medium rocket",
+  "lic": "Public domain",
+  "credit": "NASA"
+ },
+ "icps-rl10": {
+  "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/b/be/Delta_IV_rocket_second_stage.jpg/960px-Delta_IV_rocket_second_stage.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+  "page": "https://commons.wikimedia.org/wiki/File:Delta_IV_rocket_second_stage.jpg",
+  "caption": "Delta IV rocket second stage",
+  "lic": "Public domain",
+  "credit": "NASA"
+ },
+ "lvsa": {
+  "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/8/80/The_Launch_Vehicle_Stage_Adapter_%28LVSA%29_is_Moved_to_and_Loaded_Onto_the_NASA_Barge_Pegasus_for_Transport_%28MSFC-202000328%29.tiff/lossy-page1-960px-The_Launch_Vehicle_Stage_Adapter_%28LVSA%29_is_Moved_to_and_Loaded_Onto_the_NASA_Barge_Pegasus_for_Transport_%28MSFC-202000328%29.tiff.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+  "page": "https://commons.wikimedia.org/wiki/File:The_Launch_Vehicle_Stage_Adapter_(LVSA)_is_Moved_to_and_Loaded_Onto_the_NASA_Barge_Pegasus_for_Transport_(MSFC-202000328).tiff",
+  "caption": "The Launch Vehicle Stage Adapter (LVSA) is Moved to and Loaded Onto the NASA Barge Pegasus for Transport (MSFC-202000328).tiff",
+  "lic": "Public domain",
+  "credit": "NASA Mar hall Space Flight Center / Fred Deaton"
+ },
+ "lvsa-joint": {
+  "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/9/97/The_Launch_Vehicle_Stage_Adapter_%28LVSA%29_is_Moved_to_and_Loaded_Onto_the_NASA_Barge_Pegasus_for_Transport_%28MSFC-202000331%29.tiff/lossy-page1-960px-The_Launch_Vehicle_Stage_Adapter_%28LVSA%29_is_Moved_to_and_Loaded_Onto_the_NASA_Barge_Pegasus_for_Transport_%28MSFC-202000331%29.tiff.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+  "page": "https://commons.wikimedia.org/wiki/File:The_Launch_Vehicle_Stage_Adapter_(LVSA)_is_Moved_to_and_Loaded_Onto_the_NASA_Barge_Pegasus_for_Transport_(MSFC-202000331).tiff",
+  "caption": "The Launch Vehicle Stage Adapter (LVSA) is Moved to and Loaded Onto the NASA Barge Pegasus for Transport (MSFC-202000331).tiff",
+  "lic": "Public domain",
+  "credit": "NASA Mar hall Space Flight Center / Fred Deaton"
+ },
+ "core-fwdskirt": {
+  "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/d/df/Forward_Skirt_for_Artemis_III_SLS_Core_Stage_Moves_for_Next_Phase_of_Production_%28MAF_20221221_CS3_Fwd_Skirt_from_55_to_Cell_Q-13%29.jpeg/960px-Forward_Skirt_for_Artemis_III_SLS_Core_Stage_Moves_for_Next_Phase_of_Production_%28MAF_20221221_CS3_Fwd_Skirt_from_55_to_Cell_Q-13%29.jpeg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+  "page": "https://commons.wikimedia.org/wiki/File:Forward_Skirt_for_Artemis_III_SLS_Core_Stage_Moves_for_Next_Phase_of_Production_(MAF_20221221_CS3_Fwd_Skirt_from_55_to_Cell_Q-13).jpeg",
+  "caption": "Forward Skirt for Artemis III SLS Core Stage Moves for Next Phase of Production",
+  "lic": "Public domain",
+  "credit": "NASA Michoud A embly Facility / Jared Lyon "
+ },
+ "core-lox": {
+  "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/8/8e/SLS_Liquid_Oxygen_Tank.jpg/960px-SLS_Liquid_Oxygen_Tank.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+  "page": "https://commons.wikimedia.org/wiki/File:SLS_Liquid_Oxygen_Tank.jpg",
+  "caption": "SLS Liquid Oxygen Tank",
+  "lic": "Public domain",
+  "credit": "NASA/Jude Guidry"
+ },
+ "core-intertank": {
+  "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/7/75/Intertank_STA_%28MAF_20180222_P_Intertank_STA_on_Pegasus_-328%29.jpg/960px-Intertank_STA_%28MAF_20180222_P_Intertank_STA_on_Pegasus_-328%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+  "page": "https://commons.wikimedia.org/wiki/File:Intertank_STA_(MAF_20180222_P_Intertank_STA_on_Pegasus_-328).jpg",
+  "caption": "Intertank STA",
+  "lic": "Public domain",
+  "credit": "NASA Michoud A embly Facility / Jude Guidry"
+ },
+ "core-beam": {
+  "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/e/e3/Maf_20180212_p_intertank_sta_breakover_-367.jpg/960px-Maf_20180212_p_intertank_sta_breakover_-367.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+  "page": "https://commons.wikimedia.org/wiki/File:Maf_20180212_p_intertank_sta_breakover_-367.jpg",
+  "caption": "Maf 20180212 p intertank sta breakover -367",
+  "lic": "Public domain",
+  "credit": "NASA"
+ },
+ "core-lh2": {
+  "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/7/77/Final_assembly_of_SLS_liquid_hydrogen_tank_structural_test_article.jpg/960px-Final_assembly_of_SLS_liquid_hydrogen_tank_structural_test_article.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+  "page": "https://commons.wikimedia.org/wiki/File:Final_assembly_of_SLS_liquid_hydrogen_tank_structural_test_article.jpg",
+  "caption": "Final assembly of SLS liquid hydrogen tank structural test article",
+  "lic": "Public domain",
+  "credit": "NASA/Jude Guidry"
+ },
+ "core-feedline": {
+  "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/b/b1/Artemis_II_launch_%28SLS_MAF_20260401_ArtemisIILaunch_02%29_crop.jpg/960px-Artemis_II_launch_%28SLS_MAF_20260401_ArtemisIILaunch_02%29_crop.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+  "page": "https://commons.wikimedia.org/wiki/File:Artemis_II_launch_(SLS_MAF_20260401_ArtemisIILaunch_02)_crop.jpg",
+  "caption": "Artemis II launch (SLS MAF 20260401 ArtemisIILaunch 02) crop",
+  "lic": "Public domain",
+  "credit": "http ://www.na a.gov/mar hall/"
+ },
+ "core-press": {
+  "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/e/e7/Teams_Move_Artemis_II_SLS_Engine_Section_into_Position_for_Final_Join_%28MAF_20230213_CS2_ES2Final01%29.jpeg/960px-Teams_Move_Artemis_II_SLS_Engine_Section_into_Position_for_Final_Join_%28MAF_20230213_CS2_ES2Final01%29.jpeg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+  "page": "https://commons.wikimedia.org/wiki/File:Teams_Move_Artemis_II_SLS_Engine_Section_into_Position_for_Final_Join_(MAF_20230213_CS2_ES2Final01).jpeg",
+  "caption": "Teams Move Artemis II SLS Engine Section into Position for Final Join",
+  "lic": "Public domain",
+  "credit": "NASA Mar hall Space Flight Center / Michael DeMocker"
+ },
+ "core-tunnel": {
+  "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/b/b1/Artemis_II_launch_%28SLS_MAF_20260401_ArtemisIILaunch_02%29_crop.jpg/960px-Artemis_II_launch_%28SLS_MAF_20260401_ArtemisIILaunch_02%29_crop.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+  "page": "https://commons.wikimedia.org/wiki/File:Artemis_II_launch_(SLS_MAF_20260401_ArtemisIILaunch_02)_crop.jpg",
+  "caption": "Artemis II launch (SLS MAF 20260401 ArtemisIILaunch 02) crop",
+  "lic": "Public domain",
+  "credit": "http ://www.na a.gov/mar hall/"
+ },
+ "core-engsec": {
+  "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/e/e7/Teams_Move_Artemis_II_SLS_Engine_Section_into_Position_for_Final_Join_%28MAF_20230213_CS2_ES2Final01%29.jpeg/960px-Teams_Move_Artemis_II_SLS_Engine_Section_into_Position_for_Final_Join_%28MAF_20230213_CS2_ES2Final01%29.jpeg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+  "page": "https://commons.wikimedia.org/wiki/File:Teams_Move_Artemis_II_SLS_Engine_Section_into_Position_for_Final_Join_(MAF_20230213_CS2_ES2Final01).jpeg",
+  "caption": "Teams Move Artemis II SLS Engine Section into Position for Final Join",
+  "lic": "Public domain",
+  "credit": "NASA Mar hall Space Flight Center / Michael DeMocker"
+ },
+ "core-boattail": {
+  "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/a/a7/NASA_Readies_Artemis_II_Boat-tail_for_Core_Stage_2_%28MAF_20210609_CS2_BoatTail2CellA12%29.jpg/960px-NASA_Readies_Artemis_II_Boat-tail_for_Core_Stage_2_%28MAF_20210609_CS2_BoatTail2CellA12%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+  "page": "https://commons.wikimedia.org/wiki/File:NASA_Readies_Artemis_II_Boat-tail_for_Core_Stage_2_(MAF_20210609_CS2_BoatTail2CellA12).jpg",
+  "caption": "NASA Readies Artemis II Boat-tail for Core Stage 2",
+  "lic": "Public domain",
+  "credit": "NASA Michoud A embly Facility / Michael DeMocker"
+ },
+ "core-umb": {
+  "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/c/c6/NASA_Readies_Artemis_II_Boat-tail_for_Core_Stage_2_%28MAF_20210609_CS2_BoatTail2CellA10%29.jpg/960px-NASA_Readies_Artemis_II_Boat-tail_for_Core_Stage_2_%28MAF_20210609_CS2_BoatTail2CellA10%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+  "page": "https://commons.wikimedia.org/wiki/File:NASA_Readies_Artemis_II_Boat-tail_for_Core_Stage_2_(MAF_20210609_CS2_BoatTail2CellA10).jpg",
+  "caption": "NASA Readies Artemis II Boat-tail for Core Stage 2",
+  "lic": "Public domain",
+  "credit": "NASA Michoud A embly Facility / Michael DeMocker"
+ },
+ "core-marks": {
+  "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/7/78/NASA%27s_Artemis_II_SLS_Rocket_and_Orion_Spacecraft_Rollout_to_Launch_Pad_39B_%28KSC-01172026-Artemis_II_Rollout-26%29.jpg/960px-NASA%27s_Artemis_II_SLS_Rocket_and_Orion_Spacecraft_Rollout_to_Launch_Pad_39B_%28KSC-01172026-Artemis_II_Rollout-26%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+  "page": "https://commons.wikimedia.org/wiki/File:NASA%27s_Artemis_II_SLS_Rocket_and_Orion_Spacecraft_Rollout_to_Launch_Pad_39B_(KSC-01172026-Artemis_II_Rollout-26).jpg",
+  "caption": "NASA's Artemis II SLS Rocket and Orion Spacecraft Rollout to Launch Pad 39B",
+  "lic": "Public domain",
+  "credit": "NASA Mar hall Space Flight Center / NASA/Brandon Hancock"
+ },
+ "rs25": {
+  "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/0/05/Space_Shuttle_main_engine_with_transporter.jpg/960px-Space_Shuttle_main_engine_with_transporter.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+  "page": "https://commons.wikimedia.org/wiki/File:Space_Shuttle_main_engine_with_transporter.jpg",
+  "caption": "Space Shuttle main engine with transporter",
+  "lic": "Public domain",
+  "credit": "NASA/Jim Gro mann"
+ },
+ "core-thrust": {
+  "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/a/a7/NASA_Readies_Artemis_II_Boat-tail_for_Core_Stage_2_%28MAF_20210609_CS2_BoatTail2CellA12%29.jpg/960px-NASA_Readies_Artemis_II_Boat-tail_for_Core_Stage_2_%28MAF_20210609_CS2_BoatTail2CellA12%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+  "page": "https://commons.wikimedia.org/wiki/File:NASA_Readies_Artemis_II_Boat-tail_for_Core_Stage_2_(MAF_20210609_CS2_BoatTail2CellA12).jpg",
+  "caption": "NASA Readies Artemis II Boat-tail for Core Stage 2",
+  "lic": "Public domain",
+  "credit": "NASA Michoud A embly Facility / Michael DeMocker"
+ },
+ "core-lh2feed": {
+  "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/0/0a/Em1_4engines3_The_Four_RS-25_Engines_that_will_Power_SLS.jpg/960px-Em1_4engines3_The_Four_RS-25_Engines_that_will_Power_SLS.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+  "page": "https://commons.wikimedia.org/wiki/File:Em1_4engines3_The_Four_RS-25_Engines_that_will_Power_SLS.jpg",
+  "caption": "Em1 4engines3 The Four RS-25 Engines that will Power SLS",
+  "lic": "Public domain",
+  "credit": "NASA"
+ },
+ "core-loxliq": {
+  "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/d/d4/SLS_Dome_of_the_liquid_oxygen_tank_structural_test_article.jpg/960px-SLS_Dome_of_the_liquid_oxygen_tank_structural_test_article.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+  "page": "https://commons.wikimedia.org/wiki/File:SLS_Dome_of_the_liquid_oxygen_tank_structural_test_article.jpg",
+  "caption": "SLS Dome of the liquid oxygen tank structural test article",
+  "lic": "Public domain",
+  "credit": "NASA/MSFC Michoud image: Judy Guidry"
+ },
+ "core-lh2liq": {
+  "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/9/9f/SLS_Liquid_hydrogen_tank_bottom_in_CELL_E.jpg/960px-SLS_Liquid_hydrogen_tank_bottom_in_CELL_E.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+  "page": "https://commons.wikimedia.org/wiki/File:SLS_Liquid_hydrogen_tank_bottom_in_CELL_E.jpg",
+  "caption": "SLS Liquid hydrogen tank bottom in CELL E",
+  "lic": "Public domain",
+  "credit": "NASA/MSFC Michoud image: Judy Guidry"
+ },
+ "core-baffles": {
+  "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/e/ea/SLS_Liquid_Oxygen_Tank_Hardware_in_Welding.jpg/960px-SLS_Liquid_Oxygen_Tank_Hardware_in_Welding.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+  "page": "https://commons.wikimedia.org/wiki/File:SLS_Liquid_Oxygen_Tank_Hardware_in_Welding.jpg",
+  "caption": "SLS Liquid Oxygen Tank Hardware in Welding",
+  "lic": "Public domain",
+  "credit": "NASA/Michoud/Steve Seipel"
+ },
+ "core-avionics": {
+  "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/9/9c/Forward_Skirt_for_Artemis_III_SLS_Core_Stage_Moves_for_Next_Phase_of_Production_%28MAF_20221221_CS3_Fwd_Skirt_from_55_to_Cell_Q-9%29.jpeg/960px-Forward_Skirt_for_Artemis_III_SLS_Core_Stage_Moves_for_Next_Phase_of_Production_%28MAF_20221221_CS3_Fwd_Skirt_from_55_to_Cell_Q-9%29.jpeg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+  "page": "https://commons.wikimedia.org/wiki/File:Forward_Skirt_for_Artemis_III_SLS_Core_Stage_Moves_for_Next_Phase_of_Production_(MAF_20221221_CS3_Fwd_Skirt_from_55_to_Cell_Q-9).jpeg",
+  "caption": "Forward Skirt for Artemis III SLS Core Stage Moves for Next Phase of Production",
+  "lic": "Public domain",
+  "credit": "NASA Michoud A embly Facility / Jared Lyon "
+ },
+ "srb-nose": {
+  "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/7/7a/Artemis_III_Booster_Stacking_-_Right_Forward_Booster_Segment_Mated_%28KSC-20260924-PH-FMX01_0015%29.jpg/960px-Artemis_III_Booster_Stacking_-_Right_Forward_Booster_Segment_Mated_%28KSC-20260924-PH-FMX01_0015%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+  "page": "https://commons.wikimedia.org/wiki/File:Artemis_III_Booster_Stacking_-_Right_Forward_Booster_Segment_Mated_(KSC-20260924-PH-FMX01_0015).jpg",
+  "caption": "Artemis III Booster Stacking - Right Forward Booster Segment Mated",
+  "lic": "Public domain",
+  "credit": "NASA Kennedy Space Center / NASA/Frank Michaux"
+ },
+ "srb-bsm": {
+  "src": "https://upload.wikimedia.org/wikipedia/commons/a/a6/Flown_Shuttle_Booster_Separation_Motor_Nozzle_%2851112374019%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail_unscaled",
+  "page": "https://commons.wikimedia.org/wiki/File:Flown_Shuttle_Booster_Separation_Motor_Nozzle_(51112374019).jpg",
+  "caption": "Flown Shuttle Booster Separation Motor Nozzle",
+  "lic": "CC BY 2.0",
+  "credit": "Steve Jurvetson"
+ },
+ "srb-fwdskirt": {
+  "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/b/b1/Forward_Skirt_for_Artemis_III_SLS_Core_Stage_Moves_for_Next_Phase_of_Production_%28MAF_20221221_CS3_Fwd_Skirt_from_55_to_Cell_Q-11%29.jpeg/960px-Forward_Skirt_for_Artemis_III_SLS_Core_Stage_Moves_for_Next_Phase_of_Production_%28MAF_20221221_CS3_Fwd_Skirt_from_55_to_Cell_Q-11%29.jpeg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+  "page": "https://commons.wikimedia.org/wiki/File:Forward_Skirt_for_Artemis_III_SLS_Core_Stage_Moves_for_Next_Phase_of_Production_(MAF_20221221_CS3_Fwd_Skirt_from_55_to_Cell_Q-11).jpeg",
+  "caption": "Forward Skirt for Artemis III SLS Core Stage Moves for Next Phase of Production",
+  "lic": "Public domain",
+  "credit": "NASA Michoud A embly Facility / Jared Lyon "
+ },
+ "srb-seg": {
+  "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/0/00/SLS_Booster_Segments_for_Artemis_III_head_to_Kennedy_%28NG_06022026_Artemis_III_Booster_Segment_Shipment_to_KSC-1-31%29.jpg/960px-SLS_Booster_Segments_for_Artemis_III_head_to_Kennedy_%28NG_06022026_Artemis_III_Booster_Segment_Shipment_to_KSC-1-31%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+  "page": "https://commons.wikimedia.org/wiki/File:SLS_Booster_Segments_for_Artemis_III_head_to_Kennedy_(NG_06022026_Artemis_III_Booster_Segment_Shipment_to_KSC-1-31).jpg",
+  "caption": "SLS Booster Segments for Artemis III head to Kennedy",
+  "lic": "Public domain",
+  "credit": "NASA Mar hall Space Flight Center / NASA/Brandon Hancock"
+ },
+ "srb-joints": {
+  "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/e/ec/Artemis_III_Booster_Stacking_-_Right_Forward_Booster_Segment_Mat_%28KSC-20260924-PH-FMX01_0034%29.jpg/960px-Artemis_III_Booster_Stacking_-_Right_Forward_Booster_Segment_Mat_%28KSC-20260924-PH-FMX01_0034%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+  "page": "https://commons.wikimedia.org/wiki/File:Artemis_III_Booster_Stacking_-_Right_Forward_Booster_Segment_Mat_(KSC-20260924-PH-FMX01_0034).jpg",
+  "caption": "Artemis III Booster Stacking - Right Forward Booster Segment Mat",
+  "lic": "Public domain",
+  "credit": "NASA Kennedy Space Center / NASA/Frank Michaux"
+ },
+ "srb-aftskirt": {
+  "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/2/27/Artemis_II_Stacking_-_Booster_Segment%2C_Aft_Skirt_on_ML_%28KSC-20241120-PH-GEB01_0016%29.jpg/960px-Artemis_II_Stacking_-_Booster_Segment%2C_Aft_Skirt_on_ML_%28KSC-20241120-PH-GEB01_0016%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+  "page": "https://commons.wikimedia.org/wiki/File:Artemis_II_Stacking_-_Booster_Segment,_Aft_Skirt_on_ML_(KSC-20241120-PH-GEB01_0016).jpg",
+  "caption": "Artemis II Stacking - Booster Segment, Aft Skirt on ML",
+  "lic": "Public domain",
+  "credit": "NASA Kennedy Space Center / NASA/Glenn Ben on"
+ },
+ "srb-nozzle": {
+  "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/e/ea/NASA%2C_Northrop_Grumman_Test_Fire_SLS_BOLE_Booster_%28C0180_00_01_41_23_Still002_Edit%29.jpg/960px-NASA%2C_Northrop_Grumman_Test_Fire_SLS_BOLE_Booster_%28C0180_00_01_41_23_Still002_Edit%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+  "page": "https://commons.wikimedia.org/wiki/File:NASA,_Northrop_Grumman_Test_Fire_SLS_BOLE_Booster_(C0180_00_01_41_23_Still002_Edit).jpg",
+  "caption": "NASA, Northrop Grumman Test Fire SLS BOLE Booster",
+  "lic": "Public domain",
+  "credit": "NASA Mar hall Space Flight Center / Northrop Gumman/Dylan Ba"
+ },
+ "srb-tray": {
+  "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/7/7f/NASA_Worm_Logo_Painting_on_Artemis_II_Booster_%28KSC-20240130-PH-GEB01_0077%29.jpg/960px-NASA_Worm_Logo_Painting_on_Artemis_II_Booster_%28KSC-20240130-PH-GEB01_0077%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+  "page": "https://commons.wikimedia.org/wiki/File:NASA_Worm_Logo_Painting_on_Artemis_II_Booster_(KSC-20240130-PH-GEB01_0077).jpg",
+  "caption": "NASA Worm Logo Painting on Artemis II Booster",
+  "lic": "Public domain",
+  "credit": "NASA Kennedy Space Center / NASA/Glenn Ben on"
+ },
+ "srb-fwdattach": {
+  "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/d/d7/Artemis_I_SLS_Core_Stage_Prep_for_Lift_Mate.jpg/960px-Artemis_I_SLS_Core_Stage_Prep_for_Lift_Mate.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+  "page": "https://commons.wikimedia.org/wiki/File:Artemis_I_SLS_Core_Stage_Prep_for_Lift_Mate.jpg",
+  "caption": "Artemis I SLS Core Stage Prep for Lift Mate",
+  "lic": "Public domain",
+  "credit": "Kim Shiflett"
+ },
+ "srb-struts": {
+  "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/2/28/Artemis_II_Stacking_-_Booster_Segment%2C_Aft_Skirt_on_ML_%28KSC-20241120-PH-GEB01_0018%29.jpg/960px-Artemis_II_Stacking_-_Booster_Segment%2C_Aft_Skirt_on_ML_%28KSC-20241120-PH-GEB01_0018%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+  "page": "https://commons.wikimedia.org/wiki/File:Artemis_II_Stacking_-_Booster_Segment,_Aft_Skirt_on_ML_(KSC-20241120-PH-GEB01_0018).jpg",
+  "caption": "Artemis II Stacking - Booster Segment, Aft Skirt on ML",
+  "lic": "Public domain",
+  "credit": "NASA Kennedy Space Center / NASA/Glenn Ben on"
+ },
+ "srb-logo": {
+  "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/8/84/NASA_Worm_Logo_Painting_on_Artemis_II_Booster_%28KSC-20240216-PH-KLS01_0004%29.jpg/960px-NASA_Worm_Logo_Painting_on_Artemis_II_Booster_%28KSC-20240216-PH-KLS01_0004%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+  "page": "https://commons.wikimedia.org/wiki/File:NASA_Worm_Logo_Painting_on_Artemis_II_Booster_(KSC-20240216-PH-KLS01_0004).jpg",
+  "caption": "NASA Worm Logo Painting on Artemis II Booster",
+  "lic": "Public domain",
+  "credit": "NASA Kennedy Space Center / NASA/Kim Shiflett"
+ },
+ "srb-marks": {
+  "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/d/db/Artemis_II_Launch_%28NHQ202604010221%29.jpg/960px-Artemis_II_Launch_%28NHQ202604010221%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+  "page": "https://commons.wikimedia.org/wiki/File:Artemis_II_Launch_(NHQ202604010221).jpg",
+  "caption": "Artemis II Launch",
+  "lic": "Public domain",
+  "credit": "NASA HQ PHOTO"
+ },
+ "srb-grain": {
+  "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/6/60/Ammonium_Perchlorate_Composite_Propellant_%28uncured%29_is_shaped_by_a_Worker.png/960px-Ammonium_Perchlorate_Composite_Propellant_%28uncured%29_is_shaped_by_a_Worker.png?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+  "page": "https://commons.wikimedia.org/wiki/File:Ammonium_Perchlorate_Composite_Propellant_(uncured)_is_shaped_by_a_Worker.png",
+  "caption": "Ammonium Perchlorate Composite Propellant (uncured) is shaped by a Worker",
+  "lic": "Public domain",
+  "credit": "NASA'  Mar hall Space Flight Center"
+ },
+ "srb-bore": {
+  "src": "https://upload.wikimedia.org/wikipedia/commons/a/af/Ares_I_rocket_SRM_12-fin_propellant_mold.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail_unscaled",
+  "page": "https://commons.wikimedia.org/wiki/File:Ares_I_rocket_SRM_12-fin_propellant_mold.jpg",
+  "caption": "Ares I rocket SRM 12-fin propellant mold",
+  "lic": "Public domain",
+  "credit": "NASA"
+ },
+ "ml-deck": {
+  "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/9/94/Artemis_II_Mobile_Launcher_Rollback_to_VAB_%28KSC-20241004-PH-KLS01_0020%29.jpg/960px-Artemis_II_Mobile_Launcher_Rollback_to_VAB_%28KSC-20241004-PH-KLS01_0020%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+  "page": "https://commons.wikimedia.org/wiki/File:Artemis_II_Mobile_Launcher_Rollback_to_VAB_(KSC-20241004-PH-KLS01_0020).jpg",
+  "caption": "Artemis II Mobile Launcher Rollback to VAB",
+  "lic": "Public domain",
+  "credit": "NASA Kennedy Space Center / NASA/Kim Shiflett"
+ },
+ "ml-holes": {
+  "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/1/14/Artemis_I_Post-Launch_Mobile_Launcher_Rollback_%28KSC-20221209-PH-JBS01_0104%29.jpeg/960px-Artemis_I_Post-Launch_Mobile_Launcher_Rollback_%28KSC-20221209-PH-JBS01_0104%29.jpeg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+  "page": "https://commons.wikimedia.org/wiki/File:Artemis_I_Post-Launch_Mobile_Launcher_Rollback_(KSC-20221209-PH-JBS01_0104).jpeg",
+  "caption": "Artemis I Post-Launch Mobile Launcher Rollback",
+  "lic": "Public domain",
+  "credit": "Ben Smegel ky"
+ },
+ "ml-vsp": {
+  "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/2/2b/Artemis_I_Post-Launch_Mobile_Launcher_Rollback_%28KSC-20221209-PH-JBS01_0015%29.jpeg/960px-Artemis_I_Post-Launch_Mobile_Launcher_Rollback_%28KSC-20221209-PH-JBS01_0015%29.jpeg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+  "page": "https://commons.wikimedia.org/wiki/File:Artemis_I_Post-Launch_Mobile_Launcher_Rollback_(KSC-20221209-PH-JBS01_0015).jpeg",
+  "caption": "Artemis I Post-Launch Mobile Launcher Rollback",
+  "lic": "Public domain",
+  "credit": "Ben Smegel ky"
+ },
+ "ml-tsmu": {
+  "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/7/75/Artemis_II_Mobile_Launcher_Rollback_%28KSC-20241003-PH-CSH01_0004%29.jpg/960px-Artemis_II_Mobile_Launcher_Rollback_%28KSC-20241003-PH-CSH01_0004%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+  "page": "https://commons.wikimedia.org/wiki/File:Artemis_II_Mobile_Launcher_Rollback_(KSC-20241003-PH-CSH01_0004).jpg",
+  "caption": "Artemis II Mobile Launcher Rollback",
+  "lic": "Public domain",
+  "credit": "NASA Kennedy Space Center / NASA/Ben Smegel ky"
+ },
+ "ml-tower": {
+  "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/9/94/Artemis_II_Mobile_Launcher_Rollback_to_VAB_%28KSC-20241004-PH-KLS01_0020%29.jpg/960px-Artemis_II_Mobile_Launcher_Rollback_to_VAB_%28KSC-20241004-PH-KLS01_0020%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+  "page": "https://commons.wikimedia.org/wiki/File:Artemis_II_Mobile_Launcher_Rollback_to_VAB_(KSC-20241004-PH-KLS01_0020).jpg",
+  "caption": "Artemis II Mobile Launcher Rollback to VAB",
+  "lic": "Public domain",
+  "credit": "NASA Kennedy Space Center / NASA/Kim Shiflett"
+ },
+ "ml-caa": {
+  "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/1/1f/Artemis_II_On_PAD_B_%28KSC-20260120-PH-FMX01_0013%29.jpg/960px-Artemis_II_On_PAD_B_%28KSC-20260120-PH-FMX01_0013%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+  "page": "https://commons.wikimedia.org/wiki/File:Artemis_II_On_PAD_B_(KSC-20260120-PH-FMX01_0013).jpg",
+  "caption": "Artemis II On PAD B",
+  "lic": "Public domain",
+  "credit": "NASA Kennedy Space Center / NASA/Frank Michaux"
+ },
+ "ml-umbs": {
+  "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/1/1f/Artemis_II_On_PAD_B_%28KSC-20260120-PH-FMX01_0013%29.jpg/960px-Artemis_II_On_PAD_B_%28KSC-20260120-PH-FMX01_0013%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+  "page": "https://commons.wikimedia.org/wiki/File:Artemis_II_On_PAD_B_(KSC-20260120-PH-FMX01_0013).jpg",
+  "caption": "Artemis II On PAD B",
+  "lic": "Public domain",
+  "credit": "NASA Kennedy Space Center / NASA/Frank Michaux"
+ },
+ "ml-mast": {
+  "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/9/94/Artemis_II_Mobile_Launcher_Rollback_to_VAB_%28KSC-20241004-PH-KLS01_0020%29.jpg/960px-Artemis_II_Mobile_Launcher_Rollback_to_VAB_%28KSC-20241004-PH-KLS01_0020%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+  "page": "https://commons.wikimedia.org/wiki/File:Artemis_II_Mobile_Launcher_Rollback_to_VAB_(KSC-20241004-PH-KLS01_0020).jpg",
+  "caption": "Artemis II Mobile Launcher Rollback to VAB",
+  "lic": "Public domain",
+  "credit": "NASA Kennedy Space Center / NASA/Kim Shiflett"
+ }
+}

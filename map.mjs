@@ -189,6 +189,8 @@ const MM = (() => {
     const o = OBJ[pick(CFG.hud, t, LIST[0].id)], p = at(o, t), b = nearest(p);
     return { alt: Math.max(0, rel(b, p)[1]), vel: segSpeed(segAt(o, t), Math.max(o.t0, Math.min(o.t1, t))), ref: b, de: dist(p, C.earth) - R.earth, dm: dist(p, C.moon) - R.moon };
   }
+  // where the HUD's craft is (km, map frame) and the body it is nearest, for the 3-D view's geometry
+  function where(t) { const p = at(OBJ[pick(CFG.hud, t, LIST[0].id)], t); return { p, ref: nearest(p) }; }
 
   // ---- drawing
   let cv, ctx, W = 1, H = 1, zoom = 1, LABELS = [];
@@ -396,6 +398,6 @@ const MM = (() => {
     }
     ctx.textAlign = "left";
   }
-  return { orb, hyp, con, fix, path, drift, xfer, blend, dock, period, R, ang: (s, t) => rel(s.b, pos(s, t))[0], init, draw, hud, zoomBy: (f) => (zoom = Math.max(0.02, Math.min(60, zoom * f))), zoomReset: () => (zoom = 1) };
+  return { orb, hyp, con, fix, path, drift, xfer, blend, dock, period, R, ang: (s, t) => rel(s.b, pos(s, t))[0], init, draw, hud, where, zoomBy: (f) => (zoom = Math.max(0.02, Math.min(60, zoom * f))), zoomReset: () => (zoom = 1) };
 })();
 `;

@@ -1124,9 +1124,18 @@ const ISO_END = T_END, HAS_MAP = typeof MAP === "object", M_END = HAS_MAP ? MAP.
 // the 3-D player: the vehicle's LANDINGS list its shots; it reads the flight profile, the map's burns, parachutes and poses
 const hudObj = (t) => { let id = MAP.hud; if (Array.isArray(id)) for (const [a, x] of MAP.hud) if (t >= a) id = x; return MAP.objs.find((o) => o.id === id) || MAP.objs[0]; };
 const spansAt = (rows, t) => (rows || []).filter(([a, b]) => t >= a && t < b).map((r) => r[2]);
+// the ascent tables hand over to the map in the minute before T_END, so altitude and speed don't jump
+function hudAt(t) {
+  if (t >= ISO_END) return MM.hud(t);
+  const a = interp(ALT, t), v = interp(VEL, t), k = sm(ISO_END - 60, ISO_END, t);
+  if (!HAS_MAP || k <= 0) return { alt: a, vel: v, ref: "earth", de: a, dm: 384000 };
+  const h = MM.hud(t);
+  return { ...h, alt: a + (h.alt - a) * k, vel: v + (h.vel - v) * k };
+}
 const LAND = typeof LANDINGS === "object" && HAS_MAP ? makeLand(LANDINGS, stage, {
-  start: T_START, end: M_END,
-  hud: (t) => (t < ISO_END ? { alt: interp(ALT, t), vel: interp(VEL, t), ref: "earth", de: interp(ALT, t), dm: 384000 } : MM.hud(t)),
+  start: T_START, end: M_END, ascEnd: ISO_END,
+  hud: hudAt,
+  where: (t) => MM.where(t),
   fx: (t) => spansAt(hudObj(t).fx, t),
   pose: (t) => spansAt(hudObj(t).pose, t)[0] || "",
   speed: (t) => missionSpeed(t),
@@ -1135,16 +1144,18 @@ const LAND = typeof LANDINGS === "object" && HAS_MAP ? makeLand(LANDINGS, stage,
 if (LAND) land3 = () => flight && LAND.on(missionT);
 if (HAS_MAP) { EVENTS.push(...MAP.events); EVENTS.sort((a, b) => a[0] - b[0]); }
 const KEY_T = EVENTS.map((e) => e[0]);
-// after the scene: fast through coasts, slow near every event
-function missionSpeed(t) {
-  const ls = LAND && LAND.speedAt(t);
-  if (ls) return ls;
-  if (t < ISO_END) return speedAt(t);
+// a slow stretch (from, to, speed) seen from t: the speed allowed there, rising by e every 2.5 s of playback away
+// from it, so the warp eases into and out of every slow stretch instead of jumping
+const ease = (a, z, v, t) => v * Math.exp(Math.max(0, a - t, t - z) / (2.5 * v));
+// during the ascent the vehicle's own pace; after it: fast through coasts, slow near every event
+function baseSpeed(t) {
+  if (t < ISO_END) { let s = speedAt(t); for (const [a, z, v] of WIN) s = Math.min(s, ease(a, z, v, t)); return s; }
   let d = Infinity;
   for (const k of KEY_T) d = Math.min(d, Math.abs(t - k));
   const [m, f] = MAP.warp || [20, 2];
-  return m + f * d;
+  return Math.min(m + f * d, ease(-Infinity, ISO_END, speedAt(ISO_END), t));
 }
+function missionSpeed(t) { const b = baseSpeed(t); return (LAND && LAND.speedAt(t, b)) || b; }
 const TAB = [];
 { let t = T_START; while (t < M_END) { TAB.push(t); t += missionSpeed(t) / 60; } TAB.push(M_END); }
 const TOTAL = (TAB.length - 1) / 60;

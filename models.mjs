@@ -250,7 +250,10 @@ export function makeModels(K) {
     nose.position.z = -1.0;
     const setNose = (k) => (hinge.rotation.x = k * 1.95);
     const dracos = thrusters(root, [[[1.15, 3.0, 0], [1, 0.25, 0]], [[-1.15, 3.0, 0], [-1, 0.25, 0]], [[0, 3.0, 1.15], [0, 0.25, 1]], [[0, 3.0, -1.15], [0, 0.25, -1]], [[0.75, 3.35, 0.75], [0, 1, 0]], [[-0.75, 3.35, -0.75], [0, 1, 0]]]);
+    // the trunk is its own group: it is jettisoned before the deorbit burn
+    const tg = new THREE.Group();
     if (trunk) {
+      root.add(tg);
       // unpressurised trunk: solar cells on one half, white radiator panels on the other, four fins at its foot
       const tt = ctex("dTrunk", 1024, 512, (g, w, h) => {
         g.fillStyle = "#eef0f1"; g.fillRect(0, 0, w, h);
@@ -259,13 +262,13 @@ export function makeModels(K) {
         g.fillStyle = "#59606c"; g.fillRect(x0, h * 0.07, x1 - x0, h * 0.86);
         for (let i = 0; i < nx; i++) for (let j = 0; j < ny; j++) { const k = 0.8 + 0.4 * r(); g.fillStyle = `rgb(${18 * k},${30 * k},${62 * k})`; g.fillRect(x0 + i * cw + 1, h * 0.07 + j * ch + 1, cw - 2, ch - 2); }
       });
-      cyl(1.83, 1.83, -3.62, -0.02, std("#ffffff", { map: tt, roughness: 0.35, metalness: 0.1 }), root, 96, true);
-      cyl(1.86, 1.86, -3.7, -3.56, std("#b8bcc1", { metalness: 0.8, roughness: 0.35 }), root, 96);
+      cyl(1.83, 1.83, -3.62, -0.02, std("#ffffff", { map: tt, roughness: 0.35, metalness: 0.1 }), tg, 96, true);
+      cyl(1.86, 1.86, -3.7, -3.56, std("#b8bcc1", { metalness: 0.8, roughness: 0.35 }), tg, 96);
       const finShape = new THREE.Shape([new THREE.Vector2(0, 0), new THREE.Vector2(0.62, 0), new THREE.Vector2(0.62, 0.55), new THREE.Vector2(0, 1.55)]);
       const fg = once("dFin", () => new THREE.ExtrudeGeometry(finShape, { depth: 0.07, bevelEnabled: false }).translate(0, 0, -0.035).rotateY(-Math.PI / 2));
-      for (const a of XANG) mesh(fg, white, skin(root, a, 1.82, -3.56));
+      for (const a of XANG) mesh(fg, white, skin(tg, a, 1.82, -3.56));
     }
-    return { root, setNose, dracos };
+    return { root, setNose, dracos, trunk: tg };
   }
 
   // the whole stack on the pad: booster feet... root origin = Merlin exit plane, 65.7 m to the top of Dragon's nose
@@ -493,9 +496,10 @@ export function makeModels(K) {
     if (probe) { rod([0, 3.2, 0], [0, 3.95, 0], 0.05, std("#c3c7cb", { metalness: 0.85, roughness: 0.3 }), root); mesh(new THREE.ConeGeometry(0.09, 0.2, 12), std("#8c9095", { metalness: 0.8, roughness: 0.3 }), root, 0, 4.05, 0); }
     return { root, top: probe ? 4.15 : 3.23, R: 1.956 };
   }
-  // the CSM: service module below the CM (to -4.4) with the SPS bell hanging to -7.4; fire = the SPS
+  // the CSM: service module below the CM (to -4.4) with the SPS bell hanging to -7.4; fire = the SPS. The service
+  // module is its own group (`sm`), jettisoned before entry
   function apolloCSM() {
-    const root = new THREE.Group(), cm = apolloCM({ probe: true }); root.add(cm.root);
+    const top = new THREE.Group(), cm = apolloCM({ probe: true }), root = new THREE.Group(); top.add(cm.root, root);
     const smT = ctex("apolloSM", 1024, 512, (g, w, h) => { // aluminium panels, white radiator stripes, the stencilled name
       g.fillStyle = "#cfd2d5"; g.fillRect(0, 0, w, h);
       for (let i = 0; i < 6; i++) { g.fillStyle = `rgb(${196 + 10 * (i % 2)},${199 + 10 * (i % 2)},${203 + 10 * (i % 2)})`; g.fillRect((i * w) / 6, 0, w / 6, h); g.fillStyle = "rgba(0,0,0,.25)"; g.fillRect((i * w) / 6, 0, 2, h); }
@@ -515,7 +519,7 @@ export function makeModels(K) {
     for (const [x, z] of [[2.25, 2.0], [2.55, 2.3], [2.0, 2.55], [2.3, 2.6]]) mesh(once("hga", () => new THREE.SphereGeometry(0.3, 16, 8, 0, TAU, 0, 1.1)), std("#ececea", { side: THREE.DoubleSide }), root, x, -5.3, z);
     const rcs = thrusters(root, [0, 1, 2, 3].map((i) => { const a = Math.PI / 4 + (i * Math.PI) / 2; return [[Math.sin(a) * 2.25, -0.9, Math.cos(a) * 2.25], [Math.sin(a + 1.5), 0, Math.cos(a + 1.5)]]; }), 1.3);
     const fire = exhaust(root, { at: [0, -7.4, 0], re: 1.25, len: 22, kind: "hyper", glow: em.in });
-    return { root, top: cm.top, rcs, fire };
+    return { root: top, cm: cm.root, sm: root, top: cm.top, rcs, fire };
   }
 
   // ---------------------------------------------------------------- Saturn V (Apollo 11, AS-506)
@@ -635,26 +639,27 @@ export function makeModels(K) {
   }
   // the service module (white blankets, four folded solar wings, the OMS-E), the ICPS when `icps`
   function orionStack({ icps = false } = {}) {
-    const root = new THREE.Group(), orion = new THREE.Group(); root.add(orion);
-    const cm = orionCM(); orion.add(cm.root);
+    // `orion` = crew module + service module; the service module (`esm`) is its own group, left behind before entry
+    const root = new THREE.Group(), orion = new THREE.Group(), esm = new THREE.Group(); root.add(orion);
+    const cm = orionCM(); orion.add(cm.root, esm);
     const blanket = std("#ffffff", { map: ctex("esm", 1024, 512, (g, w, h) => { g.fillStyle = "#eeeeea"; g.fillRect(0, 0, w, h); const r = rng(61); for (let i = 0; i < 16; i++) for (let j = 0; j < 6; j++) { g.fillStyle = `rgba(0,0,0,${0.03 + 0.06 * r()})`; g.fillRect((i * w) / 16, (j * h) / 6, w / 16, h / 6); } g.strokeStyle = "rgba(0,0,0,.14)"; g.lineWidth = 2; for (let i = 0; i <= 16; i++) { g.beginPath(); g.moveTo((i * w) / 16, 0); g.lineTo((i * w) / 16, h); g.stroke(); } g.fillStyle = "#d8d9d6"; g.fillRect(0, h * 0.3, w, h * 0.12); }), roughness: 0.55 });
     const dark = std("#34363a", { metalness: 0.8, roughness: 0.3, side: THREE.DoubleSide });
-    lathe([[2.51, -0.02], [2.4, -0.4], [2.05, -0.78]], std("#d9dbdd", { metalness: 0.6, roughness: 0.35 }), orion, 96); // crew module adapter
-    cyl(2.05, 2.05, -4.4, -0.78, blanket, orion, 96, true);
-    lathe([[2.05, -4.4], [1.6, -4.55], [0.5, -4.6]], std("#b9bcc0", { metalness: 0.7, roughness: 0.4 }), orion, 64);
+    lathe([[2.51, -0.02], [2.4, -0.4], [2.05, -0.78]], std("#d9dbdd", { metalness: 0.6, roughness: 0.35 }), esm, 96); // crew module adapter
+    cyl(2.05, 2.05, -4.4, -0.78, blanket, esm, 96, true);
+    lathe([[2.05, -4.4], [1.6, -4.55], [0.5, -4.6]], std("#b9bcc0", { metalness: 0.7, roughness: 0.4 }), esm, 64);
     const em = engineMats("#3e4044", "#2a2826", "#ffc89a");
-    bell(orion, bellGeo("omse", 0.62, 0.22, 1.9, 0.7, 36), em, 0, -6.5, 0, 0.62);
-    for (let i = 0; i < 8; i++) { const a = (i / 8) * TAU + 0.2; mesh(once("aux", () => new THREE.CylinderGeometry(0.05, 0.11, 0.24, 10, 1, true)), dark, orion, Math.sin(a) * 1.7, -4.72, Math.cos(a) * 1.7); }
-    for (let i = 0; i < 4; i++) { const s = skin(orion, (i * Math.PI) / 2, 2.05, -1.35); box(0.4, 0.5, 0.3, std("#dcdcd8"), s, 0, 0, 0.12); }
+    bell(esm, bellGeo("omse", 0.62, 0.22, 1.9, 0.7, 36), em, 0, -6.5, 0, 0.62);
+    for (let i = 0; i < 8; i++) { const a = (i / 8) * TAU + 0.2; mesh(once("aux", () => new THREE.CylinderGeometry(0.05, 0.11, 0.24, 10, 1, true)), dark, esm, Math.sin(a) * 1.7, -4.72, Math.cos(a) * 1.7); }
+    for (let i = 0; i < 4; i++) { const s = skin(esm, (i * Math.PI) / 2, 2.05, -1.35); box(0.4, 0.5, 0.3, std("#dcdcd8"), s, 0, 0, 0.12); }
     // four solar array wings (three panels each): folded down the module for launch, an X 19 m across once deployed
     const cellsT = ctex("orCells", 512, 512, (g, w, h) => { g.fillStyle = "#565d6a"; g.fillRect(0, 0, w, h); const r = rng(5); for (let i = 0; i < 8; i++) for (let j = 0; j < 8; j++) { const k = 0.8 + 0.4 * r(); g.fillStyle = `rgb(${16 * k},${28 * k},${60 * k})`; g.fillRect((i * w) / 8 + 3, (j * h) / 8 + 3, w / 8 - 6, h / 8 - 6); } });
     const wc = std("#ffffff", { map: cellsT, metalness: 0.4, roughness: 0.3 }), wings = [];
     for (let i = 0; i < 4; i++) {
-      const a = Math.PI / 4 + (i * Math.PI) / 2, h = new THREE.Group(); h.rotation.y = a - Math.PI / 2; h.position.y = -1.9; orion.add(h); wings.push(h);
+      const a = Math.PI / 4 + (i * Math.PI) / 2, h = new THREE.Group(); h.rotation.y = a - Math.PI / 2; h.position.y = -1.9; esm.add(h); wings.push(h);
       rod([2.0, 0, 0], [2.85, 0, 0], 0.06, dark, h);
       for (let p = 0; p < 3; p++) { const q = box(2.25, 0.05, 1.95, wc, h, 3.0 + p * 2.32 + 1.1, 0, 0); q.rotation.x = 0.35; }
     }
-    const rcs = thrusters(orion, [0, 1, 2, 3].map((i) => { const a = (i * Math.PI) / 2; return [[Math.sin(a) * 2.1, -1.35, Math.cos(a) * 2.1], [0, -1, 0]]; }), 1.2);
+    const rcs = thrusters(esm, [0, 1, 2, 3].map((i) => { const a = (i * Math.PI) / 2; return [[Math.sin(a) * 2.1, -1.35, Math.cos(a) * 2.1], [0, -1, 0]]; }), 1.2);
     let stage = null, rl10 = () => {};
     if (icps) {
       // the Interim Cryogenic Propulsion Stage: the adapter cone, its white hydrogen tank, the insulated LOX tank slung
@@ -671,10 +676,10 @@ export function makeModels(K) {
       cyl(0.32, 0.45, -16.8, -16.3, std("#5b5b5e", { metalness: 0.7, roughness: 0.4 }), stage, 24);
       rl10 = exhaust(stage, { at: [0, -21.0, 0], re: 1.07, len: 34, kind: "hydrolox", glow: rm.in });
     }
-    const fire = exhaust(orion, { at: [0, -6.5, 0], re: 0.62, len: 16, kind: "hyper", glow: em.in });
+    const fire = exhaust(esm, { at: [0, -6.5, 0], re: 0.62, len: 16, kind: "hyper", glow: em.in });
     // arrays: 0 = folded inside the fairing, 1 = deployed into the X
     const arrays = (k) => wings.forEach((h) => { h.scale.set(Math.max(0.02, k), 1, 1); h.visible = k > 0.01; });
-    return { root, orion, stage, rcs, top: 3.33, fire, rl10, arrays };
+    return { root, orion, cm: cm.root, esm, stage, rcs, top: 3.33, fire, rl10, arrays };
   }
 
   // ---------------------------------------------------------------- SLS Block 1 (Artemis II) on Mobile Launcher 1

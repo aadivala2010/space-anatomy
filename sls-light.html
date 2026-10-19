@@ -2362,7 +2362,7 @@ function makeLand(list, stage, info) {
   }
   function load() {
     const U = "https://cdn.jsdelivr.net/npm/three@0.160.0/", J = U + "examples/jsm/postprocessing/";
-    loading ||= Promise.all([U + "+esm", J + "EffectComposer.js/+esm", J + "RenderPass.js/+esm", J + "UnrealBloomPass.js/+esm", J + "OutputPass.js/+esm"].map((u) => import(u)))
+    loading ||= Promise.all([U + "+esm", J + "EffectComposer.js/+esm", J + "RenderPass.js/+esm", J + "UnrealBloomPass.js/+esm", J + "OutputPass.js/+esm", U + "examples/jsm/utils/BufferGeometryUtils.js/+esm"].map((u) => import(u)))
       .then(([T, ...adds]) => { THREE = T; X = Object.assign({}, ...adds); G = shared(); prebuild(); })
       .catch((e) => { dead = true; console.warn("3-D views unavailable:", e); });
   }
@@ -2394,7 +2394,7 @@ function makeLand(list, stage, info) {
     const pmrem = new THREE.PMREMGenerator(renderer), loader = new THREE.TextureLoader(), cache = {};
     loader.setCrossOrigin("anonymous");
     return {
-      renderer, camera, composer, pass, pmrem, w: 0, h: 0, shake: 0, rt: 0,
+      renderer, camera, composer, pass, pmrem, w: 0, h: 0, shake: 0, rt: 0, clock: { value: 0 }, // clock: rt as a shader uniform
       once: (k, f) => (cache[k] ||= f()),
       img(url, srgb) {
         return (cache[url] ||= (() => { const t = loader.load(url, () => R0()); if (srgb) t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return t; })());
@@ -2489,10 +2489,182 @@ void main() {
       mk(r * 0.6, r * 0.3, "#fff6e6", k, 0.9 * opacity, 0.4);
       const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: dotTex, color: new THREE.Color(color).multiplyScalar(k), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity: 0.7 * opacity }));
       sp.scale.setScalar(r * halo); parent.add(sp); sp.position.set(x, y - r * 0.6, z);
-      // wd widens the plume (it balloons in thin air), ln stretches it
-      const set = (p, wd = 1, ln = 1) => { g.visible = sp.visible = p > 0.02; g.scale.set(wd, len * ln * p * (0.93 + 0.07 * Math.random()), wd); sp.material.opacity = 0.7 * opacity * p; };
+      // thin air widens the plume (it balloons) and stretches it
+      const set = (p, thin = 0) => { const wd = 1 + 2.4 * thin; g.visible = sp.visible = p > 0.02; g.scale.set(wd, len * (1 + 1.6 * thin) * p, wd); sp.material.opacity = 0.7 * opacity * p; };
       set(0);
       return set;
+    }
+    // ---- rocket exhaust: a soft emissive gas volume ray-marched inside a bounding cylinder hung below the nozzle exit
+    // (flow along -y in the parent's frame, or along `dir`). `kind` picks the propellant's colours; `cluster` lists the
+    // nozzle centres [x, z] of an engine cluster so the plume starts as separate jets that merge downstream; `glow` is a
+    // material whose emissive follows the throttle (the hot inside of a bell). Returns set(power 0..1, thin 0..1), where
+    // `thin` is how far the outside air has thinned: it widens and lengthens the plume into a pale hollow cone.
+    // core / body / shock-diamond colours, brightness, diamond strength, soot
+    // core / body / shock-diamond colours, brightness, diamond strength, soot (dark smoke at the edge), opacity of the
+    // glowing gas itself (a sooty kerosene flame hides the sky behind it, hydrogen's barely does), spreading rate
+    const KINDS = {
+      kero: { core: "#fff1d2", body: "#ff7b22", dc: "#fff2dc", vac: "#ffcfa0", gain: 1.7, dia: 0.5, soot: 0, op: 0.55, spread: 0.085 }, // RP-1: Merlin
+      f1: { core: "#ffe9c2", body: "#ff6d16", dc: "#fff0d8", vac: "#ffc890", gain: 1.8, dia: 0.25, soot: 1.1, op: 0.6, spread: 0.08 }, // F-1: sooty turbine exhaust film
+      solid: { core: "#fffaf0", body: "#ffc670", dc: "#ffffff", vac: "#ffe6c0", gain: 3.4, dia: 0, soot: 0, op: 0.9, spread: 0.07 }, // aluminised solid motors
+      hydrolox: { core: "#dfe6ff", body: "#6f7dff", dc: "#ffe6cf", vac: "#b4c0ff", gain: 0.42, dia: 1.6, soot: 0, op: 0.04, spread: 0.05 }, // RS-25, J-2, RL10
+      methalox: { core: "#fff0f6", body: "#ff8a55", dc: "#d9c8ff", vac: "#d4bcff", gain: 1.35, dia: 0.85, soot: 0, op: 0.3, spread: 0.075 }, // Raptor
+      hyper: { core: "#ffe0c0", body: "#ff9468", dc: "#ffe0c0", vac: "#ffc8a8", gain: 0.34, dia: 0, soot: 0, op: 0.02, spread: 0.06 }, // storable propellants
+    };
+    const noise3 = () => once("noise3", () => { // tileable smooth value-noise fbm, 64³
+      const N = 64, d = new Uint8Array(N * N * N), r = rng(77), f = (x) => x * x * x * (x * (x * 6 - 15) + 10);
+      const oct = [[4, 0.5], [8, 0.3], [16, 0.2]].map(([n, a]) => [n, a, Float32Array.from({ length: n * n * n }, r)]);
+      for (let z = 0; z < N; z++) for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+        let v = 0;
+        for (const [n, a, L] of oct) {
+          const px = (x * n) / N, py = (y * n) / N, pz = (z * n) / N, ix = Math.floor(px), iy = Math.floor(py), iz = Math.floor(pz);
+          const fx = f(px - ix), fy = f(py - iy), fz = f(pz - iz), g = (i, j, k) => L[(i % n) + (j % n) * n + (k % n) * n * n];
+          const l = (a0, b0, t) => a0 + (b0 - a0) * t;
+          v += a * l(l(l(g(ix, iy, iz), g(ix + 1, iy, iz), fx), l(g(ix, iy + 1, iz), g(ix + 1, iy + 1, iz), fx), fy), l(l(g(ix, iy, iz + 1), g(ix + 1, iy, iz + 1), fx), l(g(ix, iy + 1, iz + 1), g(ix + 1, iy + 1, iz + 1), fx), fy), fz);
+        }
+        d[x + y * N + z * N * N] = Math.max(0, Math.min(255, (v - 0.5) * 1.8 * 255 + 128));
+      }
+      const t = new THREE.Data3DTexture(d, N, N, N);
+      t.format = THREE.RedFormat; t.minFilter = t.magFilter = THREE.LinearFilter; t.wrapS = t.wrapT = t.wrapR = THREE.RepeatWrapping; t.unpackAlignment = 1; t.needsUpdate = true;
+      return t;
+    });
+    // the cluster's nozzle layout seen from below: blurred (mip-mapped) further down the plume, so the jets merge
+    function layoutTex(cluster, R, nozR) {
+      const t = tex(256, 256, (g, w, hh) => {
+        g.fillStyle = "#000"; g.fillRect(0, 0, w, hh);
+        for (const [x, z] of cluster) {
+          const cx = (x / R) * 0.5 * w + w / 2, cy = (z / R) * 0.5 * hh + hh / 2, rr = (nozR / R) * 0.5 * w, gr = g.createRadialGradient(cx, cy, 0, cx, cy, rr);
+          gr.addColorStop(0, "#fff"); gr.addColorStop(0.6, "#bbb"); gr.addColorStop(1, "#000"); g.fillStyle = gr; g.beginPath(); g.arc(cx, cy, rr, 0, TAU); g.fill();
+        }
+      }, null, false);
+      t.flipY = false;
+      return t;
+    }
+    const EXH_V = `#include <common>
+#include <logdepthbuf_pars_vertex>
+uniform mat4 uMat; uniform float uTaper; varying vec3 vP;
+void main() { // a unit cylinder below the origin, narrowed toward the top into a cone that hugs the plume
+  vec3 q = position; q.xz *= mix(uTaper, 1., clamp(-q.y, 0., 1.));
+  vP = (uMat * vec4(q, 1.0)).xyz; gl_Position = projectionMatrix * modelViewMatrix * vec4(q, 1.0);
+#include <logdepthbuf_vertex>
+}`;
+    const EXH_F = `precision highp sampler3D;
+#include <common>
+#include <logdepthbuf_pars_fragment>
+uniform vec3 uCam; uniform vec4 uUp; uniform float uT, uIn;
+uniform vec4 uA; // exit radius, length, thin air 0..1, power
+uniform vec4 uB; // bound radius, spreading rate, cluster radius (0: one nozzle), single nozzle radius
+uniform vec3 uCore, uBody, uDia, uVac;
+uniform vec4 uK; // gain, diamonds, soot, opacity
+uniform sampler3D uNoise; uniform sampler2D uLay;
+varying vec3 vP;
+void main() {
+#include <logdepthbuf_fragment>
+  if (gl_FrontFacing == (uIn > .5)) discard; // near faces from outside, far faces from inside: each pixel once
+  float re = uA.x, L = uA.y, X = uA.z, R1 = uB.x;
+  vec3 ro = uCam, rd = normalize(vP - uCam);
+  // the stretch of the ray inside the bounding cylinder, between just above the exit and the tail
+  float qa = dot(rd.xz, rd.xz), qb = dot(ro.xz, rd.xz), qc = dot(ro.xz, ro.xz) - R1 * R1;
+  float t0 = -1e9, t1 = 1e9;
+  if (qa > 1e-7) { float disc = qb * qb - qa * qc; if (disc <= 0.) discard; float sq = sqrt(disc); t0 = (-qb - sq) / qa; t1 = (-qb + sq) / qa; }
+  else if (qc > 0.) discard;
+  float smin = -.3 * re;
+  if (abs(rd.y) > 1e-6) { float u0 = (-ro.y - smin) / rd.y, u1 = (-ro.y - L) / rd.y; t0 = max(t0, min(u0, u1)); t1 = min(t1, max(u0, u1)); }
+  t0 = max(t0, 0.);
+  if (t1 <= t0) discard;
+  float tc = clamp(qa > 1e-7 ? -qb / qa : t0, t0, t1), H = max(t1 - tc, tc - t0);
+  float dith = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(.06711056, .00583715)))); // interleaved gradient noise
+  bool clus = uB.z > 0.;
+  float lam = (clus ? uB.w : re) * (1.8 + 3. * X); // shock-cell spacing
+  vec3 acc = vec3(0.); float T = 1.;
+  // a thin-air plume is smooth and huge: fewer samples do (and keep its cost down when it fills the screen)
+  int N = int(mix(22., 9., X));
+  for (int j = 0; j < 22; j++) {
+    if (j >= N) break;
+    float xs = 1. - 2. * (float(j) + dith) / float(N);
+    float t = tc + H * xs * abs(xs);
+    if (t < t0 || t > t1) continue;
+    float w = 4. * H * abs(xs) / float(N);
+    vec3 p = ro + rd * t;
+    float s = -p.y, sp = max(s, 0.), rr = length(p.xz);
+    float R = re * (1. + X * 3. * (1. - exp(-sp / (re * 1.3)))) + sp * (uB.y + .3 * X);
+    float start = smoothstep(-re * .3, re * .1, s) * smoothstep(-re * 1.2, re * .2, uUp.w + dot(p, uUp.xyz));
+    float fade = pow(max(1. - sp / L, 0.), 1.5) * start;
+    if (fade <= 0.) continue;
+    float u = rr / R;
+    vec3 np = vec3(p.x / (re * 2.4), (sp - uT * re * 26.) / (re * 3.2), p.z / (re * 2.4)) * .21 / (1. + 2.5 * X); // thin air: broad, smooth
+    float n1 = texture(uNoise, np).r, n2 = texture(uNoise, np * 2.63 + vec3(.37, uT * .9, .73)).r;
+    float tw = smoothstep(0., L * .25, sp);
+    float edge = u + (n1 - .5) * .9 * tw + (n2 - .5) * .35 * (1. - .8 * X);
+    float e2 = edge * edge;
+    float prof = mix(exp(-e2 * e2 * 1.6), exp(-pow((edge - .78) / .22, 2.)) * .9 + exp(-e2 * 2.2) * .25, X);
+    float body = prof * fade * mix(1., .3 + 1.5 * n1, tw * .85) * (1. - .82 * X) * re / mix(re, R, X * .6); // thin air: spread thinner
+    float core = (exp(-u * u * 6.) * exp(-sp / (L * .18)) + exp(-u * u * 3.) * exp(-sp / (re * 1.1)) * .8) * (1. - .55 * X);
+    if (clus) { // separate jets near the exits, merging as the layout blurs downstream (gone by ~30 nozzle radii)
+      core *= .12;
+      if (sp < uB.w * 30. * (1. + 2. * X)) {
+        float lod = log2(1. + sp / uB.w) * 1.7;
+        float jet = textureLod(uLay, p.xz / uB.z * .5 + .5, lod).r * smoothstep(uB.z * (1.1 + .12 * lod), uB.z * .85, rr);
+        float cell = fract(s / lam + .5) - .5;
+        jet *= exp(-sp / (uB.w * 9. * (1. + 2. * X))) * (1. + uK.y * 2.5 * exp(-cell * cell * 40.) * smoothstep(lam * .4, lam, s) * exp(-s / (lam * 4.)));
+        core += jet * 1.8;
+      }
+    }
+    // hotter (whiter) in the middle and near the exits, cooling to the body colour at the edge and to dull red at the tail
+    float heat = clamp(core * 1.4 + (1. - smoothstep(.2, 1., u)) * exp(-sp / (L * .35)) * (.5 + .5 * n2), 0., 1.);
+    vec3 col = mix(mix(mix(uBody, uBody * vec3(.95, .55, .35), smoothstep(.45, 1., sp / L)), uVac, X * .65), uCore, heat);
+    acc += T * col * (body + core * start * .55) * w;
+    float od = uK.w * (body + core * start * .3) * (1. - .7 * X); // the glowing gas hides what is behind it
+    if (uK.z > 0.) od += uK.z * exp(-pow((u - .75) / .3, 2.)) * exp(-sp / (re * 3.)) * (.3 + n1) * start;
+    T *= exp(-od * w / re * 1.4 * uA.w);
+  }
+  acc /= re;
+  if (!clus && uK.y > 0.) { // Mach diamonds, integrated where the ray passes the axis
+    float b = -rd.y, den = max(1. - b * b, .05), tcl = qa > 1e-7 ? -qb / qa : -1.;
+    if (tcl > t0 && tcl < t1) {
+      vec3 xc = ro + rd * tcl; float s = -xc.y, m = length(xc.xz);
+      float f = fract(s / lam + .5) - .5, dd = abs(f) * lam * .6 + m, wd = re * .4;
+      float on = smoothstep(lam * .35, lam * .9, s) * exp(-s / (lam * 5.)) * (1. - X * .9);
+      acc += uDia * uK.y * exp(-dd * dd / (wd * wd)) * on * wd * 1.77 / sqrt(den) / re * 1.6;
+    }
+  }
+  float pw = uA.w;
+  gl_FragColor = vec4(acc * uK.x * pw * (1. - .6 * X), 1. - T); // a plume in vacuum is a faint, wide cone
+}`;
+    const exhFloor = { y: -1e9 }; // a scene sets the ground height its plumes stop at
+    function exhaust(parent, { at = [0, 0, 0], re, len, kind = "kero", cluster = null, nozR = re, dir = null, glow = null, glowK = 2.5 }) {
+      const K = KINDS[kind], frame = new THREE.Group(); frame.position.set(...at); parent.add(frame);
+      if (dir) frame.quaternion.setFromUnitVectors(V3(0, -1, 0), V3(...dir).normalize());
+      const cr = cluster ? Math.max(...cluster.map(([x, z]) => Math.hypot(x, z))) + nozR : 0, R0 = cluster ? cr : re;
+      const uni = {
+        uCam: { value: V3() }, uUp: { value: new THREE.Vector4(0, 1, 0, 0) }, uT: G.clock, uIn: { value: 0 }, uMat: { value: new THREE.Matrix4() }, uTaper: { value: 1 },
+        uA: { value: new THREE.Vector4(R0, len, 0, 0) }, uB: { value: new THREE.Vector4(R0, K.spread, cr, nozR) },
+        uCore: { value: new THREE.Color(K.core) }, uBody: { value: new THREE.Color(K.body) }, uDia: { value: new THREE.Color(K.dc) }, uVac: { value: new THREE.Color(K.vac) },
+        uK: { value: new THREE.Vector4(K.gain, K.dia, K.soot, K.op) }, uNoise: { value: noise3() },
+        uLay: { value: cluster ? layoutTex(cluster, cr, nozR) : once("blankTex", () => new THREE.DataTexture(new Uint8Array(4), 1, 1)) },
+      };
+      const m = new THREE.Mesh(once("exhGeo", () => new THREE.CylinderGeometry(1, 1, 1, 40, 1).translate(0, -0.5, 0)), new THREE.ShaderMaterial({
+        uniforms: uni, vertexShader: EXH_V, fragmentShader: EXH_F, transparent: true, depthWrite: false, side: THREE.DoubleSide,
+        blending: THREE.CustomBlending, blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor,
+      }));
+      m.frustumCulled = false; m.visible = false; frame.add(m);
+      const inv = new THREE.Matrix4(), wp = V3(), top = 0.35 * R0;
+      m.onBeforeRender = (r, s, cam) => {
+        inv.copy(frame.matrixWorld).invert();
+        uni.uCam.value.copy(cam.position).applyMatrix4(inv);
+        const c = uni.uCam.value, B = uni.uB.value.x;
+        uni.uIn.value = c.x * c.x + c.z * c.z < B * B && c.y < top && c.y > -uni.uA.value.y ? 1 : 0;
+        const up = V3(0, 1, 0).transformDirection(inv);
+        uni.uUp.value.set(up.x, up.y, up.z, wp.setFromMatrixPosition(frame.matrixWorld).y - exhFloor.y);
+      };
+      // cap: the most it may reach (m), e.g. while it plays on the stage below at hot staging
+      return (p, thin = 0, cap = Infinity) => {
+        m.visible = p > 0.01 && cap > 0.05;
+        if (glow) glow.emissiveIntensity = p * glowK;
+        if (!m.visible) return;
+        const L = Math.min(cap, len * (1 + 1.2 * thin) * (0.55 + 0.45 * p)), Rend = R0 * (1 + 3 * thin) + L * (K.spread + 0.3 * thin), B = Math.max(R0 * 1.25, Rend * 1.3);
+        uni.uA.value.set(R0, L, thin, p); uni.uB.value.x = B; uni.uTaper.value = Math.min(1, (R0 * (1.5 + 3 * thin)) / B);
+        m.position.y = top; m.scale.set(B, L + top, B); m.updateMatrix(); uni.uMat.value.copy(m.matrix);
+      };
     }
     // small attitude-control thruster puffs: [position, direction] in the parent frame
     function thrusters(parent, list, len = 1.4) {
@@ -2648,122 +2820,11 @@ gl_FragColor = vec4(c * f * day, 1.0); }`,
       };
     }
 
-    // ---- vehicles (metres; root origin = feet / base / heat shield unless noted)
-    function falcon9Booster() {
-      const root = new THREE.Group(), body = new THREE.Group(); root.add(body); body.position.y = 2.28;
-      const soot = once("f9soot", () => tex(256, 1024, (g, w, hh) => {
-        g.fillStyle = "#eceef0"; g.fillRect(0, 0, w, hh);
-        const r = rng(9);
-        for (let i = 0; i < 260; i++) { const x = r() * w, y = r() * hh, low = y / hh; g.strokeStyle = "rgba(28,24,20," + (0.08 + 0.5 * low * low * r()) + ")"; g.lineWidth = 2 + 10 * r(); g.beginPath(); g.moveTo(x, y); g.lineTo(x + (r() - 0.5) * 6, y + 60 + 200 * r()); g.stroke(); }
-        const gr = g.createLinearGradient(0, hh * 0.75, 0, hh); gr.addColorStop(0, "rgba(20,18,16,0)"); gr.addColorStop(1, "rgba(20,18,16,.85)"); g.fillStyle = gr; g.fillRect(0, 0, w, hh);
-      }));
-      const white = std("#ffffff", { map: soot, roughness: 0.5 }), black = std("#15171a", { roughness: 0.6 }), metal = std("#55595f", { metalness: 0.7, roughness: 0.35, side: THREE.DoubleSide });
-      cyl(1.83, 1.83, 1.2, 42, white, body, 64);
-      cyl(1.83, 1.83, 42, 48.5, black, body, 64);
-      cyl(1.95, 1.95, 0.1, 1.4, metal, body, 64);
-      rod([1.86, 3, 0.3], [1.86, 41, 0.3], 0.12, std("#d8dadc"), body); // raceway
-      const bell = new THREE.LatheGeometry([[0.47, -0.55], [0.4, -0.1], [0.24, 0.45]].map(([r, y]) => new THREE.Vector2(r, y)), 24);
-      for (let i = -1; i < 8; i++) { const a = (i * Math.PI) / 4, r = i < 0 ? 0 : 1.25; mesh(bell, metal, body, Math.cos(a) * r, -0.35, Math.sin(a) * r); }
-      const finMat = std("#a3a8ae", { metalness: 0.6, roughness: 0.35, map: once("f9fin", () => tex(64, 64, lattice(5, 5, "#fff"))), alphaTest: 0.5, side: THREE.DoubleSide });
-      for (let i = 0; i < 4; i++) { const a = (i * Math.PI) / 2, f = box(1.7, 1.4, 0.12, finMat, body, Math.cos(a) * 2.7, 46.5, Math.sin(a) * 2.7); f.rotation.y = -a; }
-      const legMat = std("#1c1d20", { roughness: 0.5 }), legs = [];
-      for (let i = 0; i < 4; i++) {
-        const a = (i * Math.PI) / 2 + Math.PI / 4, holder = new THREE.Group(), pivot = new THREE.Group();
-        holder.rotation.y = -a; body.add(holder); holder.add(pivot); pivot.position.set(1.95, 3.5, 0);
-        box(0.5, 9, 0.38, legMat, pivot, 0, 4.5, 0);
-        mesh(new THREE.CylinderGeometry(0.55, 0.55, 0.2, 16), legMat, pivot, 0, 9, 0);
-        legs.push(pivot);
-      }
-      const fire = plume(body, 0, -0.9, 0, 0.45, 26, "#ffa64d");
-      return { root, legs: (k) => legs.forEach((p) => (p.rotation.z = -k * 130 * D2R)), fire };
-    }
-
-    const steelTex = () => once("steel", () => tex(512, 1024, (g, w, hh) => {
-      g.fillStyle = "#d4d8dd"; g.fillRect(0, 0, w, hh);
-      g.strokeStyle = "rgba(70,74,80,.2)"; g.lineWidth = 2;
-      for (let y = 0; y < hh; y += hh / 36) { g.beginPath(); g.moveTo(0, y); g.lineTo(w, y); g.stroke(); }
-      const r = rng(4);
-      for (let i = 0; i < 160; i++) { const y = r() > 0.5 ? r() * 90 : hh - r() * 140; g.fillStyle = "rgba(40,34,28," + 0.15 * r() + ")"; g.fillRect(r() * w, y, 4 + 20 * r(), 10 + 60 * r()); }
-    }));
-    function superHeavy() {
-      const root = new THREE.Group();
-      const steel = std("#ffffff", { map: steelTex(), metalness: 0.55, roughness: 0.3 }), dark = std("#2a2c30", { metalness: 0.4, roughness: 0.5, side: THREE.DoubleSide });
-      cyl(4.5, 4.5, 1.4, 69, steel, root, 96);
-      cyl(4.5, 4.5, 69, 72.5, dark, root, 96);
-      cyl(4.62, 4.62, 0, 1.6, dark, root, 96);
-      const bell = new THREE.CylinderGeometry(0.32, 0.62, 2.0, 18, 1, true), fires = [];
-      const ring = (n, r, a0, lit) => { for (let i = 0; i < n; i++) { const a = a0 + (i * 2 * Math.PI) / n, x = Math.cos(a) * r, z = Math.sin(a) * r; mesh(bell, dark, root, x, 0.2, z); if (lit) fires.push(plume(root, x, -0.8, z, 0.55, 40, "#8fb6ff", { spread: 1.9 })); } };
-      ring(3, 0.95, 0, true); ring(10, 2.3, 0.3, true); ring(20, 3.75, 0, false);
-      const finMat = std("#7c8086", { metalness: 0.5, roughness: 0.4, map: once("shfin", () => tex(64, 64, lattice(6, 5, "#fff"))), alphaTest: 0.5, side: THREE.DoubleSide });
-      for (let i = 0; i < 4; i++) { const a = Math.PI / 4 + (i * Math.PI) / 2, f = box(4, 3.2, 0.45, finMat, root, Math.cos(a) * 6.5, 67.6, Math.sin(a) * 6.5); f.rotation.y = -a; }
-      for (const s of [-1, 1]) box(1.6, 0.8, 1.2, dark, root, s * 5.3, 65.4, 0); // catch pins
-      return { root, fires };
-    }
-
-    // Starship upper stage. Heat-shield tiles face local +x (the belly); the Pez door is on -x.
-    function starshipShip() {
-      const root = new THREE.Group(), body = new THREE.Group(); root.add(body);
-      const t = once("shipTex", () => tex(1024, 2048, (g, w, hh) => {
-        g.drawImage(steelTex().image, 0, 0, w, hh);
-        const r = rng(8), s = 26;
-        g.fillStyle = "#121315"; g.fillRect(0, 0, w / 2, hh);
-        for (let y = 0, row = 0; y < hh; y += s * 0.87, row++) for (let x = (row % 2) * s * 0.5; x < w / 2; x += s) {
-          const c = 14 + 22 * r(); g.fillStyle = r() < 0.006 ? "#c9ccd0" : `rgb(${c},${c},${c + 2})`; g.beginPath();
-          for (let k = 0; k < 6; k++) { const a = (k / 6) * TAU + Math.PI / 6; g.lineTo(x + Math.cos(a) * s * 0.48, y + Math.sin(a) * s * 0.48); } g.fill();
-        }
-      }));
-      const skin = std("#ffffff", { map: t, metalness: 0.55, roughness: 0.32 }), dark = std("#1b1c1f", { roughness: 0.55, metalness: 0.3 }), engMat = std("#3b3d42", { metalness: 0.75, roughness: 0.3, side: THREE.DoubleSide });
-      const hull = [cyl(4.5, 4.5, 1.6, 40, skin, body, 96)];
-      const nose = []; for (let i = 0; i <= 18; i++) { const f = i / 18; nose.push([4.5 * Math.pow(Math.max(0, 1 - f * f), 0.55), 40 + 10.3 * f]); }
-      hull.push(lathe(nose, skin, body, 96));
-      cyl(4.56, 4.56, 0, 1.6, dark, body, 96);
-      const flaps = [];
-      for (const [y, h, w, th] of [[45, 6, 2.6, 0.32], [7.5, 9.5, 3.4, 0.45]]) for (const s of [-1, 1]) {
-        const pv = new THREE.Group(); pv.position.set(1.3, y, s * 4.3); body.add(pv);
-        box(th, h, w, dark, pv, 0, 0, s * w * 0.5); flaps.push([pv, s]);
-      }
-      const rsl = new THREE.LatheGeometry([[0.66, -0.75], [0.52, -0.2], [0.3, 0.55]].map(([r, y]) => new THREE.Vector2(r, y)), 28);
-      const rvac = new THREE.LatheGeometry([[1.15, -1.5], [0.95, -0.6], [0.5, 0.6]].map(([r, y]) => new THREE.Vector2(r, y)), 36);
-      const fires = [];
-      for (let i = 0; i < 3; i++) { const a = (i * TAU) / 3, b = a + Math.PI / 3; mesh(rsl, engMat, body, Math.cos(a) * 1.1, -0.2, Math.sin(a) * 1.1); fires.push(plume(body, Math.cos(a) * 1.1, -0.95, Math.sin(a) * 1.1, 0.6, 34, "#8fb6ff", { spread: 2 })); mesh(rvac, engMat, body, Math.cos(b) * 3, -0.6, Math.sin(b) * 3); }
-      const door = box(0.25, 4.8, 3.6, std("#050506", { roughness: 0.9 }), body, -4.42, 30.5, 0);
-      for (const s of [-1, 1]) box(1.0, 0.6, 1.0, dark, body, 0, 41, s * 5.0); // catch pins
-      return { root, body, hull, fires, door, flaps: (k, c) => flaps.forEach(([pv, s], i) => (pv.rotation.y = s * (k + 0.06 * Math.sin(c * 2 + i)))) };
-    }
-
-    function crewDragon({ trunk = true } = {}) {
-      const root = new THREE.Group();
-      const skin = std("#f4f5f6", { map: quilt("dragonSkin", "#f6f6f4", "rgba(0,0,0,.08)", 8), roughness: 0.32 });
-      const black = std("#16181b", { roughness: 0.4 }), shieldM = std("#3a2f28", { roughness: 0.95 }), metal = std("#9aa0a6", { metalness: 0.85, roughness: 0.25 });
-      lathe([[0, -0.22], [0.8, -0.2], [1.5, -0.12], [1.9, -0.03], [2.0, 0.06]], shieldM, root, 96);
-      lathe([[2.0, 0.06], [1.98, 0.22], [1.3, 2.95], [1.0, 3.12], [0.82, 3.18]], skin, root, 96);
-      cyl(0.8, 0.84, 3.18, 3.45, metal, root, 48);
-      mesh(new THREE.TorusGeometry(0.8, 0.05, 8, 48).rotateX(Math.PI / 2), metal, root, 0, 3.46, 0);
-      const side = (y) => 1.98 - ((y - 0.22) * 0.68) / 2.73; // sidewall radius at height y
-      for (let i = 0; i < 4; i++) { // SuperDraco pods and windows
-        const a = Math.PI / 4 + (i * Math.PI) / 2, hold = new THREE.Group(); hold.rotation.y = -a; root.add(hold);
-        box(0.3, 0.95, 0.62, black, hold, side(1.2) - 0.02, 1.2, 0).rotation.z = 0.24;
-        const w = new THREE.Group(); w.rotation.y = -a - Math.PI / 4; root.add(w);
-        box(0.06, 0.32, 0.36, std("#06080b", { metalness: 0.9, roughness: 0.08 }), w, side(2.0) + 0.01, 2.0, 0).rotation.z = 0.24;
-      }
-      const hinge = new THREE.Group(); hinge.position.set(1.0, 3.25, 0); root.add(hinge);
-      const nose = lathe([[1.1, 0], [1.02, 0.35], [0.72, 0.78], [0, 0.98]], skin, hinge, 72); nose.position.x = -1.0;
-      cyl(1.08, 1.08, -0.02, 0.02, black, nose, 48);
-      const setNose = (k) => (hinge.rotation.z = -k * 1.95);
-      const dracos = thrusters(root, [[[1.25, 2.6, 0], [1, 0.2, 0]], [[-1.25, 2.6, 0], [-1, 0.2, 0]], [[0, 2.6, 1.25], [0, 0.2, 1]], [[0, 2.6, -1.25], [0, 0.2, -1]], [[0.9, 2.9, 0.9], [0, 1, 0]], [[-0.9, 2.9, -0.9], [0, 1, 0]]]);
-      if (trunk) {
-        const tt = once("trunk", () => tex(1024, 256, (g, w, hh) => {
-          g.fillStyle = "#eef0f2"; g.fillRect(0, 0, w, hh);
-          const c = cells("dcells", "#1a2a52", "#8a93a6", 18, 6).image; g.drawImage(c, 0, 0, w / 2, hh);
-          g.strokeStyle = "rgba(0,0,0,.12)"; for (let x = w / 2; x < w; x += 32) { g.beginPath(); g.moveTo(x, 0); g.lineTo(x, hh); g.stroke(); }
-        }));
-        cyl(1.85, 1.85, -3.7, -0.05, std("#ffffff", { map: tt, roughness: 0.4, metalness: 0.1 }), root, 96);
-        cyl(1.9, 1.9, -3.78, -3.6, metal, root, 64);
-        for (let i = 0; i < 4; i++) { const a = (i * Math.PI) / 2, f = box(0.08, 1.4, 0.9, skin, root, Math.cos(a) * 2.25, -3.0, Math.sin(a) * 2.25); f.rotation.y = -a; }
-      }
-      return { root, setNose, dracos };
-    }
-
+    // ---- vehicles. The launch vehicles and Crew Dragon come from models.mjs; the rest are below (metres; root origin
+    // = base / heat shield unless noted)
+    const MOD = makeModels({ THREE, X, V3, UP, TAU, D2R, std, mesh, cyl, lathe, box, rod, tex, once, rng, exhaust, thrusters, lunarModule });
+    const { falcon9Booster, crewDragon, f9Stack, superHeavy, starshipShip, starshipStack, apolloCM, apolloCSM, saturnV, orionCM, orionStack, slsStack } = MOD;
+    // capsules: heat shield at y = 0 facing -y; `top` = docking interface / parachute attach height
     // International Space Station; Harmony's forward docking port (IDA-2) at the origin facing -x
     function iss() {
       const root = new THREE.Group();
@@ -2828,68 +2889,6 @@ gl_FragColor = vec4(c * f * day, 1.0); }`,
       const afire = plume(asc, 0, 3.2, 0, 0.45, 9, "#ffd9a8", { spread: 4, opacity: 0.22 });
       const rcs = thrusters(asc, [0, 1, 2, 3].map((i) => { const a = Math.PI / 4 + (i * Math.PI) / 2; return [[Math.cos(a) * 2.1, 5.3, Math.sin(a) * 2.1], [Math.cos(a), 0, Math.sin(a)]]; }), 1);
       return { root, desc, asc, fire, afire, rcs, probes: (hh) => probes.forEach((p) => (p.scale.y = Math.min(1, Math.max(0.02, (hh + 0.05) / 1.6)))) };
-    }
-
-    // capsules: heat shield at y = 0 facing -y; `top` = docking interface / parachute attach height
-    function apolloCM({ probe = false } = {}) {
-      const root = new THREE.Group();
-      const mylar = std("#e6e7ea", { metalness: 0.92, roughness: 0.18, bumpMap: foilTex, bumpScale: 0.4 }), shield = std("#4b3b2d", { roughness: 0.95 });
-      lathe([[0, -0.28], [0.9, -0.24], [1.6, -0.14], [1.92, -0.04], [1.96, 0.06]], shield, root, 96);
-      lathe([[1.96, 0.06], [1.9, 0.16], [0.42, 3.1], [0.38, 3.25], [0, 3.27]], mylar, root, 96);
-      for (const a of [-0.5, 0.5]) { const w = new THREE.Group(); w.rotation.y = a; root.add(w); box(0.05, 0.3, 0.32, std("#06080b", { metalness: 0.9, roughness: 0.1 }), w, 1.15, 1.75, 0).rotation.z = 0.48; }
-      if (probe) { rod([0, 3.2, 0], [0, 4.0, 0], 0.06, std("#bfc3c8", { metalness: 0.8, roughness: 0.3 }), root); mesh(new THREE.ConeGeometry(0.1, 0.18, 12), std("#888"), root, 0, 4.06, 0); }
-      return { root, top: probe ? 4.15 : 3.27, R: 1.96 };
-    }
-    function apolloCSM() {
-      const root = new THREE.Group(), cm = apolloCM({ probe: true }); root.add(cm.root);
-      const sm = std("#ffffff", { map: once("smTex", () => tex(512, 256, (g, w, hh) => { g.fillStyle = "#d9dadc"; g.fillRect(0, 0, w, hh); for (let i = 0; i < 6; i++) { g.fillStyle = i % 2 ? "#f2f2f2" : "#bfc1c4"; g.fillRect((i * w) / 6, 0, w / 6, hh); } g.fillStyle = "#222"; g.font = "bold 34px sans-serif"; g.fillText("UNITED STATES", 30, hh * 0.55); })), metalness: 0.6, roughness: 0.35 });
-      cyl(1.96, 1.96, -3.95, -0.02, sm, root, 96);
-      lathe([[1.96, -3.95], [1.6, -4.1], [0.6, -4.15]], std("#c9cbcf", { metalness: 0.7, roughness: 0.35 }), root, 64);
-      lathe([[1.25, -7.0], [0.9, -5.6], [0.55, -4.1]], std("#4a4c50", { metalness: 0.35, roughness: 0.55, side: THREE.DoubleSide }), root, 48); // SPS bell
-      for (let i = 0; i < 4; i++) { const a = Math.PI / 4 + (i * Math.PI) / 2, h = new THREE.Group(); h.rotation.y = -a; root.add(h); box(0.3, 0.7, 0.55, std("#d8d8d8"), h, 2.05, -0.9, 0); }
-      rod([1.4, -3.9, 1.4], [2.4, -5.0, 2.4], 0.05, std("#ccc"), root);
-      for (const [x, z] of [[2.4, 2.1], [2.7, 2.4], [2.1, 2.7], [2.4, 2.7]]) mesh(new THREE.SphereGeometry(0.3, 16, 8, 0, TAU, 0, 1.1), std("#e8e8e8", { side: THREE.DoubleSide }), root, x, -5.1, z);
-      const rcs = thrusters(root, [0, 1, 2, 3].map((i) => { const a = Math.PI / 4 + (i * Math.PI) / 2; return [[Math.cos(a) * 2.25, -0.9, Math.sin(a) * 2.25], [Math.cos(a + 1.5), 0, Math.sin(a + 1.5)]]; }), 1.3);
-      return { root, top: cm.top, rcs };
-    }
-    function orionCM() {
-      const root = new THREE.Group();
-      const tiles = std("#ffffff", { map: quilt("orionTiles", "#b9bdc2", "rgba(40,40,45,.5)", 16), metalness: 0.65, roughness: 0.35 }), shield = std("#5a4634", { roughness: 0.95 });
-      lathe([[0, -0.32], [1.2, -0.28], [2.2, -0.14], [2.48, -0.03], [2.51, 0.06]], shield, root, 96);
-      lathe([[2.51, 0.06], [2.45, 0.2], [0.78, 3.05], [0.72, 3.3], [0, 3.33]], tiles, root, 96);
-      for (const a of [-0.45, -0.15, 0.15, 0.45]) { const w = new THREE.Group(); w.rotation.y = a; root.add(w); box(0.05, 0.28, 0.24, std("#06080b", { metalness: 0.9, roughness: 0.1 }), w, 1.55, 1.75, 0).rotation.z = 0.53; }
-      return { root, top: 3.33, R: 2.51 };
-    }
-    function orionStack({ icps = false } = {}) {
-      const root = new THREE.Group(), orion = new THREE.Group(); root.add(orion);
-      const cm = orionCM(); orion.add(cm.root);
-      const white = std("#f0f0ee", { map: quilt("esm", "#efefec", "rgba(0,0,0,.1)", 6), roughness: 0.45 }), dark = std("#3a3c40", { metalness: 0.8, roughness: 0.3, side: THREE.DoubleSide });
-      cyl(2.51, 2.51, -0.9, -0.02, white, orion, 96);
-      cyl(2.05, 2.05, -4.9, -0.9, std("#ffffff", { map: quilt("esm2", "#d8d9d6", "rgba(0,0,0,.18)", 5), metalness: 0.3, roughness: 0.4 }), orion, 96);
-      lathe([[0.95, -7.0], [0.7, -5.9], [0.35, -4.9]], dark, orion, 48);
-      const wc = std("#ffffff", { map: cells("ocells", "#15244a", "#6c7487", 4, 12), metalness: 0.3, roughness: 0.35 });
-      const wings = [];
-      for (let i = 0; i < 4; i++) {
-        const a = Math.PI / 4 + (i * Math.PI) / 2, h = new THREE.Group(); h.rotation.y = -a; h.position.y = -2.0; orion.add(h); wings.push(h);
-        rod([2.0, 0, 0], [2.8, 0, 0], 0.06, dark, h);
-        for (let p = 0; p < 3; p++) { const q = box(2.25, 0.05, 1.95, wc, h, 3.0 + p * 2.3 + 1.1, 0, 0); q.rotation.x = 0.35; }
-      }
-      const rcs = thrusters(orion, [0, 1, 2, 3].map((i) => { const a = (i * Math.PI) / 2; return [[Math.cos(a) * 2.1, -4.6, Math.sin(a) * 2.1], [0, -1, 0]]; }), 1.2);
-      let stage = null;
-      if (icps) {
-        stage = new THREE.Group(); root.add(stage);
-        const sw = std("#efeeea", { roughness: 0.5 });
-        cyl(2.05, 2.55, -6.6, -4.95, sw, stage, 96, true);
-        lathe([[0, -6.4], [1.6, -6.55], [2.5, -6.9]], sw, stage, 64);
-        cyl(2.5, 2.5, -11.6, -6.9, std("#ffffff", { map: quilt("icps", "#e8e4dc", "rgba(0,0,0,.1)", 4), roughness: 0.55 }), stage, 96);
-        mesh(new THREE.SphereGeometry(1.7, 48, 24), std("#c79a4b", { map: foilTex, bumpMap: foilTex, bumpScale: 1, metalness: 0.8, roughness: 0.35 }), stage, 0, -12.6, 0).scale.y = 0.7;
-        for (let i = 0; i < 6; i++) { const a = (i * TAU) / 6; rod([Math.cos(a) * 2.4, -11.6, Math.sin(a) * 2.4], [Math.cos(a) * 0.9, -13.6, Math.sin(a) * 0.9], 0.06, dark, stage); }
-        lathe([[1.08, -17.6], [0.7, -15.2], [0.3, -13.6]], std("#2b2c2f", { metalness: 0.5, roughness: 0.5, side: THREE.DoubleSide }), stage, 48);
-      }
-      const fire = plume(orion, 0, -7.0, 0, 0.9, 16, "#ffd9b0", { spread: 3, opacity: 0.3 }), rl10 = stage ? plume(stage, 0, -17.6, 0, 1.0, 30, "#cfdcff", { spread: 3, opacity: 0.35 }) : () => {};
-      // arrays: 0 = folded inside the fairing, 1 = deployed into the X
-      const arrays = (k) => wings.forEach((h) => { h.scale.set(Math.max(0.02, k), 1, 1); h.visible = k > 0.01; });
-      return { root, orion, stage, rcs, top: 3.33, fire, rl10, arrays };
     }
 
     // parachute cluster hanging from a point; `set` breathes the canopies, k = 0..1 release/collapse after splashdown
@@ -3118,218 +3117,6 @@ void main() {
     }
 
     // ================================================================ launch day (metres, +y up, vehicle axis at x = z = 0)
-    // artwork painted on a body of revolution: an open slice of radius r (rb at the bottom) between y0 and y1, centred on
-    // angle a (0 = facing +z, growing toward +x), `arc` radians wide; draw(g, w, h) paints a transparent canvas
-    function decal(parent, r, y0, y1, a, arc, w, hh, draw, rb = r) {
-      const m = mesh(new THREE.CylinderGeometry(r, rb, y1 - y0, 32, 1, true, a - arc / 2, arc), new THREE.MeshStandardMaterial({ map: tex(w, hh, draw), transparent: true, alphaTest: 0.04, roughness: 0.5, polygonOffset: true, polygonOffsetFactor: -2 }), parent, 0, (y0 + y1) / 2, 0);
-      m.castShadow = false; return m;
-    }
-    // letters stacked top to bottom, upright
-    const vtext = (txt, col, font) => (g, w, hh) => { g.fillStyle = col; g.font = font; g.textAlign = "center"; g.textBaseline = "middle"; const n = txt.length; for (let i = 0; i < n; i++) g.fillText(txt[i], w / 2, ((i + 0.5) * hh) / n); };
-    // a word turned on its side, reading top to bottom
-    const rtext = (txt, col, font, sx = 1) => (g, w, hh) => { g.save(); g.font = font; const k = Math.min(1, (hh * 0.94) / (g.measureText(txt).width * sx)); g.translate(w / 2, hh / 2); g.rotate(Math.PI / 2); g.scale(sx * k, k); g.fillStyle = col; g.textAlign = "center"; g.textBaseline = "middle"; g.fillText(txt, 0, 0); g.restore(); };
-    function flag(g, x, y, w, hh) {
-      for (let i = 0; i < 13; i++) { g.fillStyle = i % 2 ? "#fff" : "#b22234"; g.fillRect(x, y + (i * hh) / 13, w, hh / 13 + 0.5); }
-      g.fillStyle = "#3c3b6e"; g.fillRect(x, y, w * 0.4, (hh * 7) / 13);
-      g.fillStyle = "#fff"; for (let i = 0; i < 50; i++) g.fillRect(x + w * 0.02 + (i % 10) * w * 0.037, y + hh * 0.03 + Math.floor(i / 10) * hh * 0.1, w * 0.012, hh * 0.03);
-    }
-    const flagArt = (g, w, hh) => flag(g, 0, 0, w, hh);
-    function meatball(g, cx, cy, r) {
-      g.fillStyle = "#0b3d91"; g.beginPath(); g.arc(cx, cy, r, 0, TAU); g.fill();
-      g.strokeStyle = "#fff"; g.lineWidth = r * 0.03; g.beginPath(); g.ellipse(cx, cy, r * 0.75, r * 0.28, -0.35, 0, TAU); g.stroke();
-      g.fillStyle = "#fc3d21"; g.beginPath(); g.moveTo(cx - r * 0.9, cy + r * 0.35); g.quadraticCurveTo(cx, cy - r * 0.05, cx + r * 0.85, cy - r * 0.55); g.lineTo(cx + r * 0.2, cy - r * 0.05); g.quadraticCurveTo(cx - r * 0.2, cy + r * 0.2, cx - r * 0.9, cy + r * 0.35); g.fill();
-      g.fillStyle = "#fff"; g.font = `bold ${r * 0.42}px Helvetica,Arial,sans-serif`; g.textAlign = "center"; g.textBaseline = "middle"; g.fillText("NASA", cx, cy + r * 0.02);
-    }
-    const WORM = "900 120px 'Arial Rounded MT Bold','Helvetica Rounded',Arial,sans-serif";
-    const tankLines = (key, base, line, n, ny = 0) => once(key, () => tex(1024, 1024, (g, w, hh) => { // panel seams on a tank
-      g.fillStyle = base; g.fillRect(0, 0, w, hh);
-      const r = rng(17); for (let i = 0; i < 1600; i++) { g.fillStyle = `rgba(0,0,0,${0.02 * r()})`; g.fillRect(r() * w, r() * hh, 6 + 30 * r(), 2 + 30 * r()); }
-      g.strokeStyle = line; g.lineWidth = 2; for (let i = 0; i < n; i++) { g.beginPath(); g.moveTo((i * w) / n, 0); g.lineTo((i * w) / n, hh); g.stroke(); }
-      for (let j = 1; j < ny; j++) { g.beginPath(); g.moveTo(0, (j * hh) / ny); g.lineTo(w, (j * hh) / ny); g.stroke(); }
-    }));
-    const bell = (r0, r1, len, seg = 40) => new THREE.LatheGeometry([[r1, -len], [r1 * 0.82, -len * 0.55], [r0 * 1.25, -len * 0.12], [r0, 0]].map(([r, y]) => new THREE.Vector2(r, y)), seg);
-    const engM = () => std("#4a4744", { metalness: 0.7, roughness: 0.35, side: THREE.DoubleSide });
-
-    // ---- Falcon 9 Block 5 + Crew Dragon: booster feet at 0, interstage to 50.8, second stage to 63, Dragon to ~70.6
-    function f9Stack() {
-      const root = new THREE.Group(), b = falcon9Booster(); root.add(b.root);
-      const vfont = "italic 900 150px 'Arial Black',Arial,sans-serif";
-      decal(b.root, 1.845, 26, 41, 0.2, 0.7, 128, 1024, rtext("SPACEX", "#16181b", vfont, 1.2));
-      decal(b.root, 1.845, 12, 19.5, 0.2, 0.7, 128, 512, rtext("NASA", "#e03c31", WORM));
-      decal(b.root, 1.845, 42, 43.6, -0.5, 0.5, 190, 100, flagArt);
-      const fire = plume(b.root, 0, 1.4, 0, 1.75, 50, "#ffb35a", { spread: 1.3, k: 2.2, halo: 2.5 });
-      const s2 = new THREE.Group(); root.add(s2);
-      cyl(1.83, 1.83, 50.8, 63, std("#ffffff", { map: tankLines("f9s2", "#f1f2f3", "rgba(0,0,0,.08)", 12, 3), roughness: 0.45 }), s2, 64);
-      cyl(1.86, 1.86, 62.6, 63.0, std("#2a2c30", { roughness: 0.5 }), s2, 64);
-      decal(s2, 1.845, 53, 61, 0.2, 0.55, 128, 512, rtext("SPACEX", "#16181b", vfont, 1.2));
-      mesh(bell(0.45, 1.5, 6.4), std("#3b3f45", { metalness: 0.8, roughness: 0.3, side: THREE.DoubleSide }), s2, 0, 49.8, 0); // MVac niobium nozzle extension, inside the interstage
-      cyl(0.5, 0.45, 49.8, 50.8, engM(), s2, 24);
-      const mvac = plume(s2, 0, 43.4, 0, 1.45, 70, "#ffbd8a", { spread: 3.4, opacity: 0.22, k: 1.6, halo: 3 });
-      const d = crewDragon(); d.root.position.y = 63 + 3.78; root.add(d.root);
-      return { root, len: 70.6, parts: { booster: b.root, s2, dragon: d.root }, fires: { m1d: fire, mvac }, dragon: d, legs: b.legs };
-    }
-
-    // ---- Starship: Super Heavy (0 to 72.5 incl. the hot-staging ring) and Ship on top (to ~122.8)
-    function starshipStack() {
-      const root = new THREE.Group(), sh = superHeavy(), ship = starshipShip(); root.add(sh.root, ship.root); ship.root.position.y = 72.5; ship.root.rotation.y = Math.PI * 0.75;
-      const dark = std("#202226", { metalness: 0.4, roughness: 0.5 });
-      for (let i = 0; i < 24; i++) { const a = (i * TAU) / 24, h = new THREE.Group(); h.rotation.y = a; sh.root.add(h); box(0.5, 2.4, 0.2, std("#0a0a0c"), h, 0, 70.9, 4.56); } // hot-staging vents
-      for (let i = 0; i < 2; i++) rod([Math.cos(i * 2.2) * 4.6, 4, Math.sin(i * 2.2) * 4.6], [Math.cos(i * 2.2) * 4.6, 68, Math.sin(i * 2.2) * 4.6], 0.28, dark, sh.root); // chines / conduits
-      const big = plume(sh.root, 0, -0.6, 0, 4.3, 80, "#ff9c5a", { spread: 1.3, k: 2.2, halo: 2 });
-      const rv = [0, 1, 2].map((i) => { const b2 = (i * TAU) / 3 + Math.PI / 3; return plume(ship.body, Math.cos(b2) * 3, -2.1, Math.sin(b2) * 3, 1.05, 55, "#ffb0c8", { spread: 3, opacity: 0.35, k: 2.4 }); });
-      const shipFire = (p) => { ship.fires.forEach((f) => f(p)); };
-      return { root, len: 122.8, parts: { booster: sh.root, ship: ship.root }, fires: { booster: (p, w, l) => { big(p, w, l); sh.fires.forEach((f) => f(p * 0.6, w, l)); }, ship: shipFire, rvac: (p, w, l) => rv.forEach((f) => f(p, w, l)) }, ship };
-    }
-
-    // ---- Saturn V (Apollo 11): F-1 nozzle exits at 0; S-IC 5 to 47.1; S-II interstage to 52.6; S-II to 72; S-IVB aft
-    // interstage to 77.5; S-IVB to 89.8; IU to 90.7; SLA to 99.2; CSM; boost cover and escape tower to ~116.6
-    function saturnV() {
-      const root = new THREE.Group(), R1 = 5.05, R3 = 3.3;
-      const white = std("#f3f3ef", { roughness: 0.5 }), black = std("#17181a", { roughness: 0.55 }), grey = std("#9da1a6", { metalness: 0.5, roughness: 0.4 });
-      const s1 = new THREE.Group(), inter = new THREE.Group(), s2 = new THREE.Group(), s4b = new THREE.Group(), les = new THREE.Group(); root.add(s1, inter, s2, s4b, les);
-      // S-IC: roll pattern at the base, intertank and forward skirt; "UNITED STATES" down the side, the flag above it
-      const sic = once("sic", () => tex(1024, 2048, (g, w, hh) => {
-        g.fillStyle = "#f3f3ef"; g.fillRect(0, 0, w, hh);
-        const Y = (y) => (1 - (y - 5) / 42.1) * hh;
-        const quarters = (y0, y1, odd) => { for (let q = 0; q < 4; q++) if ((q % 2) === odd) { g.fillStyle = "#17181a"; g.fillRect((q * w) / 4, Y(y1), w / 4, Y(y0) - Y(y1)); } };
-        quarters(5, 12.6, 1); quarters(25.8, 30.2, 0); quarters(44.4, 47.1, 1);
-        g.strokeStyle = "rgba(0,0,0,.12)"; g.lineWidth = 2; for (let i = 0; i < 64; i++) { const x = (i * w) / 64; g.beginPath(); g.moveTo(x, Y(30.2)); g.lineTo(x, Y(44.4)); g.stroke(); }
-        for (const y of [12.6, 25.8, 30.2, 44.4]) { g.fillStyle = "rgba(0,0,0,.25)"; g.fillRect(0, Y(y) - 2, w, 4); }
-        g.fillStyle = "#17181a"; g.font = "bold 66px Helvetica,Arial,sans-serif"; g.textAlign = "center"; g.textBaseline = "middle";
-        "UNITED STATES".split("").forEach((c, i) => g.fillText(c, w * 0.875, Y(39.5 - i * 1.85)));
-        flag(g, w * 0.875 - 70, Y(43.6), 140, Y(41.6) - Y(43.6));
-      }));
-      const sicM = std("#ffffff", { map: sic, roughness: 0.5 });
-      cyl(R1, R1, 5, 47.1, sicM, s1, 96).rotation.y = Math.PI / 4; // texture u = 0.875 faces +z
-      mesh(new THREE.CylinderGeometry(R1, R1, 0.25, 96), black, s1, 0, 5.1, 0);
-      const f1 = bell(0.6, 1.85, 5.0, 36), f1M = std("#3e3b38", { metalness: 0.6, roughness: 0.45, side: THREE.DoubleSide });
-      const eng = [[0, 0]]; for (let i = 0; i < 4; i++) { const a = Math.PI / 4 + (i * Math.PI) / 2; eng.push([Math.cos(a) * 3.25, Math.sin(a) * 3.25]); }
-      for (const [x, z] of eng) { mesh(f1, f1M, s1, x, 5.0, z); mesh(new THREE.TorusGeometry(1.85, 0.08, 8, 40).rotateX(Math.PI / 2), f1M, s1, x, 0.02, z); }
-      for (let i = 1; i < 5; i++) { // engine fairings and fins on the outboard engines
-        const [x, z] = eng[i], a = Math.atan2(z, x), h = new THREE.Group(); h.rotation.y = -a; s1.add(h);
-        mesh(new THREE.CylinderGeometry(1.6, 1.1, 3.2, 32, 1, false, 0, TAU), white, h, 4.25, 3.6, 0);
-        const fs = new THREE.Shape([new THREE.Vector2(0, 0), new THREE.Vector2(3.6, 0), new THREE.Vector2(3.6, 1.7), new THREE.Vector2(0, 6.5)]);
-        mesh(new THREE.ExtrudeGeometry(fs, { depth: 0.24, bevelEnabled: false }), white, h, R1 - 0.1, 2.0, -0.12);
-      }
-      const f1fire = plume(s1, 0, -0.4, 0, 6.3, 95, "#ffa646", { spread: 1.3, k: 2.3, halo: 1.6 });
-      // S-II interstage (dropped 30 s after staging), with its eight ullage motors
-      cyl(R1, R1, 47.1, 52.6, white, inter, 96);
-      for (let i = 0; i < 8; i++) { const a = (i * TAU) / 8 + 0.2, h = new THREE.Group(); h.rotation.y = a; inter.add(h); cyl(0.22, 0.32, 47.6, 50.4, white, h, 12).position.z = R1 + 0.15; }
-      // S-II
-      cyl(R1, R1, 52.6, 72, std("#ffffff", { map: tankLines("s2", "#f2f2ee", "rgba(0,0,0,.07)", 24, 4), roughness: 0.5 }), s2, 96);
-      mesh(new THREE.CylinderGeometry(R1 + 0.03, R1 + 0.03, 0.5, 96), black, s2, 0, 71.6, 0);
-      decal(s2, R1 + 0.03, 57, 66, 0, 0.5, 128, 512, vtext("USA", "#17181a", "bold 150px Helvetica,Arial,sans-serif"));
-      const j2 = bell(0.3, 1.0, 3.0, 28);
-      for (const [x, z] of eng) mesh(j2, f1M, s2, x * 0.55, 52.6, z * 0.55);
-      const j2fire = plume(s2, 0, 49.5, 0, 3.0, 70, "#ffd7b0", { spread: 2.6, opacity: 0.32, k: 2.4 });
-      lathe([[R1, 72], [R1 - 0.1, 72.4], [R3 + 0.05, 77.5]], white, s2, 96); // S-IVB aft interstage stays with the S-II
-      // S-IVB, instrument unit, the fixed bottom of the adapter, Eagle inside it
-      const s4t = once("s4b2", () => tex(1024, 1024, (g, w, hh) => {
-        g.fillStyle = "#f3f3ef"; g.fillRect(0, 0, w, hh);
-        g.fillStyle = "#17181a"; for (let q = 0; q < 4; q += 2) g.fillRect(((q + 0.5) * w) / 4, hh * 0.8, w / 4, hh * 0.2);
-        g.font = "bold 150px Helvetica,Arial,sans-serif"; g.textAlign = "center"; "USA".split("").forEach((c, i) => g.fillText(c, w * 0.5, hh * (0.22 + i * 0.18)));
-      }));
-      cyl(R3, R3, 77.5, 89.8, std("#ffffff", { map: s4t, roughness: 0.5 }), s4b, 96).rotation.y = Math.PI; // u = 0.5 faces +z
-      mesh(bell(0.35, 1.0, 2.9, 28), f1M, s4b, 0, 77.5, 0);
-      const s4fire = plume(s4b, 0, 74.6, 0, 1.0, 40, "#ffd7b0", { spread: 3.2, opacity: 0.32, k: 2.4 });
-      cyl(R3, R3, 89.8, 90.7, std("#ffffff", { map: tankLines("iu", "#dfe0dc", "rgba(0,0,0,.25)", 16), metalness: 0.3, roughness: 0.4 }), s4b, 96);
-      const slaM = std("#e6e6e2", { roughness: 0.55, side: THREE.DoubleSide }), rS = (y) => R3 - ((R3 - 1.96) * (y - 90.7)) / 8.5;
-      cyl(rS(92.9), R3, 90.7, 92.9, slaM, s4b, 96, true);
-      const lm = lunarModule({ folded: true }); lm.root.position.y = 89.9; s4b.add(lm.root);
-      const petals = [0, 1, 2, 3].map((i) => {
-        const mid = Math.PI / 4 + (i * Math.PI) / 2, hg = new THREE.Group(), pv = new THREE.Group(); hg.rotation.y = mid; hg.position.y = 92.9; s4b.add(hg);
-        pv.position.z = rS(92.9); hg.add(pv);
-        const m = mesh(new THREE.CylinderGeometry(1.96, rS(92.9), 6.3, 24, 1, true, -Math.PI / 4, Math.PI / 2), slaM, pv, 0, 3.15, -rS(92.9));
-        m.castShadow = true; return { hg, pv };
-      });
-      // CSM on top, under the boost protective cover and the launch escape tower
-      const csm = apolloCSM(); csm.root.position.y = 99.2 + 3.95; root.add(csm.root);
-      const sps = plume(csm.root, 0, -7.0, 0, 1.2, 18, "#ffe0b8", { spread: 3, opacity: 0.3 });
-      const bpc = lathe([[2.03, 103.1], [2.01, 103.35], [0.46, 106.35], [0.34, 106.6]], std("#f2f2ee", { roughness: 0.45 }), les, 96);
-      bpc.castShadow = true;
-      const red = std("#b9452a", { roughness: 0.5, metalness: 0.2 });
-      for (let i = 0; i < 4; i++) { const a = Math.PI / 4 + (i * Math.PI) / 2, c = Math.cos(a), s = Math.sin(a); rod([c * 0.95, 106.5, s * 0.95], [c * 0.42, 110.6, s * 0.42], 0.07, red, les); }
-      for (let k = 0; k < 4; k++) { const y0 = 106.5 + k * 1.03, r0 = 0.95 - k * 0.13, r1 = r0 - 0.13; for (let i = 0; i < 4; i++) { const a = Math.PI / 4 + (i * Math.PI) / 2, b2 = a + Math.PI / 2; rod([Math.cos(a) * r0, y0, Math.sin(a) * r0], [Math.cos(b2) * r1, y0 + 1.03, Math.sin(b2) * r1], 0.04, red, les); } }
-      cyl(0.33, 0.33, 110.6, 114.8, white, les, 32);
-      for (let i = 0; i < 4; i++) { const a = (i * Math.PI) / 2; mesh(new THREE.ConeGeometry(0.16, 0.5, 12), black, les, Math.cos(a) * 0.32, 110.8, Math.sin(a) * 0.32).rotation.set(Math.sin(a) * 0.5, 0, -Math.cos(a) * 0.5 + Math.PI); }
-      cyl(0.28, 0.33, 114.8, 115.4, black, les, 32); cyl(0.1, 0.28, 115.4, 116.3, white, les, 32); mesh(new THREE.SphereGeometry(0.11, 12, 8), black, les, 0, 116.35, 0);
-      const lesFire = plume(les, 0, 110.6, 0, 0.5, 12, "#ffcf9a", { spread: 2.2 });
-      return {
-        root, len: 116.4, parts: { s1, inter, s2, s4b, les, csm: csm.root }, petals, csm, lm,
-        fires: { f1: f1fire, j2: j2fire, s4: s4fire, les: lesFire, sps },
-      };
-    }
-
-    // ---- SLS Block 1 (Artemis II): core stage bottom at 0 (RS-25s below it), boosters' aft skirts at -3.6 on the deck,
-    // core to 64.6, adapter cone to 72.6, ICPS and Orion stage adapter, fairing panels to 80.8, Orion, abort tower to 96
-    function slsStack() {
-      const root = new THREE.Group(), RC = 4.2, RB = 1.86, XB = 6.6;
-      const foam = std("#ffffff", { map: once("foam", () => tex(1024, 1024, (g, w, hh) => {
-        g.fillStyle = "#d8732c"; g.fillRect(0, 0, w, hh);
-        const r = rng(23); for (let i = 0; i < 5000; i++) { const c = r(); g.fillStyle = c < 0.5 ? `rgba(120,50,10,${0.08 * r()})` : `rgba(255,170,90,${0.08 * r()})`; g.beginPath(); g.arc(r() * w, r() * hh, 2 + 12 * r(), 0, TAU); g.fill(); }
-        g.strokeStyle = "rgba(90,35,5,.12)"; g.lineWidth = 2; for (let j = 1; j < 6; j++) { g.beginPath(); g.moveTo(0, (j * hh) / 6); g.lineTo(w, (j * hh) / 6); g.stroke(); }
-      })), roughness: 0.85 });
-      const white = std("#f2f2ee", { roughness: 0.5 }), dark = std("#2b2c2f", { roughness: 0.5, metalness: 0.3 }), steel = std("#b8bcc0", { metalness: 0.7, roughness: 0.35 });
-      const core = new THREE.Group(); root.add(core);
-      lathe([[3.3, -0.2], [RC, 1.6], [RC, 5.5]], std("#e8e6e0", { map: quilt("boat", "#e6e4de", "rgba(0,0,0,.2)", 10), roughness: 0.7 }), core, 96); // boat-tail heat shield
-      cyl(RC, RC, 5.5, 64.6, foam, core, 128);
-      cyl(RC + 0.04, RC + 0.04, 39.5, 46.2, std("#ffffff", { map: tankLines("intertank", "#c9682a", "rgba(70,25,0,.45)", 96), roughness: 0.8 }), core, 128); // stringers
-      for (const y of [5.5, 39.5, 46.2, 59.6]) mesh(new THREE.TorusGeometry(RC + 0.02, 0.06, 6, 128).rotateX(Math.PI / 2), std("#a8541e", { roughness: 0.8 }), core, 0, y, 0);
-      decal(core, RC + 0.05, 20, 34, 0, 0.45, 160, 1024, rtext("NASA", "#e03c31", WORM));
-      decal(core, RC + 0.05, 48, 51.5, 0, 0.45, 190, 100, flagArt);
-      for (const s of [-1, 1]) { const a = Math.PI / 2 + s * 0.35; rod([Math.sin(a) * (RC + 0.35), 5.0, Math.cos(a) * (RC + 0.35)], [Math.sin(a) * (RC + 0.35), 46.4, Math.cos(a) * (RC + 0.35)], 0.22, foam, core); } // LOX feedlines
-      rod([Math.sin(-0.5) * (RC + 0.2), 5.2, Math.cos(-0.5) * (RC + 0.2)], [Math.sin(-0.5) * (RC + 0.2), 62, Math.cos(-0.5) * (RC + 0.2)], 0.18, foam, core); // systems tunnel
-      const rs = bell(0.42, 1.15, 3.1, 36), rsM = std("#5a5652", { metalness: 0.6, roughness: 0.4, side: THREE.DoubleSide });
-      for (let i = 0; i < 4; i++) { const a = Math.PI / 4 + (i * Math.PI) / 2; mesh(rs, rsM, core, Math.cos(a) * 1.65, -0.1, Math.sin(a) * 1.65); }
-      const rsFire = plume(core, 0, -3.3, 0, 2.7, 60, "#bcd4ff", { spread: 1.5, opacity: 0.45, k: 2, halo: 2 });
-      // launch vehicle stage adapter: short cylinder then the cone up to the ICPS
-      cyl(RC, RC, 64.6, 66.4, foam, core, 128);
-      lathe([[RC, 66.4], [2.56, 72.6]], foam, core, 128);
-      // boosters
-      const srbT = once("srb", () => tex(512, 2048, (g, w, hh) => {
-        g.fillStyle = "#f3f3f0"; g.fillRect(0, 0, w, hh);
-        const Y = (y) => (1 - y / 43.4) * hh; g.fillStyle = "#3b3c40"; for (const y of [8, 16, 24, 32, 40]) g.fillRect(0, Y(y) - 7, w, 14);
-        g.save(); g.translate(w / 2, Y(30)); g.rotate(Math.PI / 2); g.fillStyle = "#e03c31"; g.font = WORM; g.textAlign = "center"; g.textBaseline = "middle"; g.scale(1.6, 1.2); g.fillText("NASA", 0, 0); g.restore();
-      }));
-      const srbs = [-1, 1].map((sd) => {
-        const g = new THREE.Group(); g.position.x = sd * XB; root.add(g);
-        lathe([[2.62, -3.6], [2.3, -1.4], [RB, 0.2]], std("#e7e7e3", { roughness: 0.6 }), g, 64);
-        const b2 = cyl(RB, RB, 0, 43.4, std("#ffffff", { map: srbT, roughness: 0.5 }), g, 64); b2.rotation.y = Math.PI;
-        const nose = []; for (let i = 0; i <= 14; i++) { const f = i / 14; nose.push([RB * Math.pow(1 - f, 0.62) * (1 - 0.08 * f) + (i === 14 ? 0 : 0), 43.4 + 6.8 * f]); }
-        lathe(nose, white, g, 64);
-        mesh(bell(0.75, 1.85, 1.9, 32), dark, g, 0, -3.3, 0);
-        for (const y of [3.0, 41.0]) rod([-sd * RB, y, 0], [-sd * (XB - RC), y, 0], 0.18, steel, g); // attach struts toward the core
-        return g;
-      });
-      const srbFire = srbs.map((g) => plume(g, 0, -5.0, 0, 2.0, 95, "#fff1d6", { spread: 1.35, k: 2.8, halo: 2.5 }));
-      // Orion stack with the ICPS (its tank shows between the adapter cone and the Orion stage adapter)
-      const o = orionStack({ icps: true }); o.root.position.y = 81.0; root.add(o.root); o.arrays(0);
-      cyl(2.58, 2.58, -6.4, -5.2, steel, o.stage, 96); // Orion stage adapter
-      decal(o.stage, 2.53, -10.4, -8.0, 0, 0.6, 256, 96, (g, w, hh) => { g.fillStyle = "#16181b"; g.font = "bold 70px Helvetica,Arial,sans-serif"; g.textAlign = "center"; g.textBaseline = "middle"; g.fillText("ICPS", w / 2, hh / 2); });
-      // fairing panels (three) round the service module
-      const sajM = std("#ffffff", { map: once("saj", () => tex(1024, 256, (g, w, hh) => {
-        g.fillStyle = "#efefec"; g.fillRect(0, 0, w, hh); g.fillStyle = "rgba(0,0,0,.12)"; for (let i = 0; i < 24; i++) g.fillRect((i * w) / 24, 0, 2, hh);
-        meatball(g, w * 0.17, hh * 0.5, hh * 0.32); meatball(g, w * 0.5, hh * 0.5, hh * 0.32);
-        g.fillStyle = "#003247"; g.font = "bold 60px Helvetica,Arial,sans-serif"; g.textAlign = "center"; g.fillText("esa", w * 0.83, hh * 0.6);
-      })), roughness: 0.5, side: THREE.DoubleSide });
-      const saj = [0, 1, 2].map((i) => { const g = new THREE.Group(); root.add(g); mesh(new THREE.CylinderGeometry(2.62, 2.62, 5.0, 48, 1, true, (i * TAU) / 3 - Math.PI / 3, TAU / 3), sajM, g, 0, 78.3, 0); g.userData.a = (i * TAU) / 3; return g; });
-      // launch abort system: ogive fairing over the crew module, abort motor, jettison motor, attitude control motor, nose
-      const las = new THREE.Group(); root.add(las);
-      const og = []; for (let i = 0; i <= 18; i++) { const f = i / 18; og.push([0.55 + 2.08 * Math.sqrt(Math.max(0, 1 - f * f)), 80.6 + 6.4 * f]); }
-      const ogM = std("#ffffff", { map: once("ogive", () => tex(1024, 512, (g, w, hh) => { g.fillStyle = "#f2f2ee"; g.fillRect(0, 0, w, hh); flag(g, w * 0.5 - 70, hh * 0.45, 140, 74); g.save(); g.translate(w * 0.62, hh * 0.62); g.fillStyle = "#e03c31"; g.font = "900 70px 'Arial Rounded MT Bold',Arial,sans-serif"; g.textAlign = "center"; g.fillText("NASA", 0, 0); g.restore(); })), roughness: 0.45 });
-      lathe(og, ogM, las, 96).rotation.y = Math.PI;
-      cyl(0.48, 0.5, 87.0, 92.0, std("#e9e9e6", { roughness: 0.4 }), las, 32);
-      for (let i = 0; i < 4; i++) { const a = (i * Math.PI) / 2 + Math.PI / 4; const n = mesh(new THREE.CylinderGeometry(0.12, 0.22, 0.7, 12), dark, las, Math.cos(a) * 0.55, 87.6, Math.sin(a) * 0.55); n.rotation.set(Math.sin(a) * 0.7, 0, -Math.cos(a) * 0.7); }
-      cyl(0.42, 0.48, 92.0, 94.0, steel, las, 32);
-      cyl(0.45, 0.42, 94.0, 95.2, std("#1d1e21", { roughness: 0.5 }), las, 32);
-      lathe([[0.45, 95.2], [0.3, 95.7], [0, 96.0]], white, las, 32);
-      const lasFire = plume(las, 0, 92.0, 0, 0.5, 10, "#ffd2a0", { spread: 2.4 });
-      return {
-        root, len: 96, parts: { srbL: srbs[0], srbR: srbs[1], core, las, saj0: saj[0], saj1: saj[1], saj2: saj[2], orion: o.root }, saj, o,
-        fires: { rs25: rsFire, srb: (p, w, l) => srbFire.forEach((f) => f(p, w, l)), las: lasFire, rl10: o.rl10, oms: o.fire },
-      };
-    }
-
     // ---- pads. Each returns the deck height the vehicle stands on and a setter for its swing arms (k = 0 docked .. 1 away)
     const latM = (col, nx, ny) => std(col, { map: once("lat" + nx + "x" + ny, () => tex(128, 128, (g, w, hh) => { g.strokeStyle = "#fff"; g.lineWidth = 10; g.strokeRect(0, 0, w, hh); g.lineWidth = 6; g.beginPath(); g.moveTo(0, 0); g.lineTo(w, hh); g.moveTo(w, 0); g.lineTo(0, hh); g.stroke(); }, [nx, ny])), alphaTest: 0.5, side: THREE.DoubleSide, metalness: 0.45, roughness: 0.5 });
     function truss(parent, x, z, w, h, col, y0 = 0, deck = 7) {
@@ -3457,6 +3244,7 @@ void main() {
     // ---- liftoff: the pad, the stack on the deck, ignition, hold-down release and the climb out to ~1.5 km
     function padScene({ pad, stk, rel, a, foot = 0, fires, focus, chase, smoke = "#efece6", dirs = [[1, 0], [-1, 0]], arms = [rel - 1, rel + 1.5], drift = 0, events = [] }) {
       const P = pad();
+      exhFloor.y = P.deck;
       world.add(stk.root);
       const smk = particles({ n: 9000, color: smoke, size: 26, drag: 0.35, rise: 3.5, gravity: 0, life: 16, opacity: 0.22 });
       const trail = particles({ n: 6000, color: smoke, size: 14, drag: 0.6, rise: 0.8, gravity: 0, life: 22, opacity: 0.3 });
@@ -3474,7 +3262,7 @@ void main() {
         },
         update(s, st, dt) {
           const t = st.t; c += dt;
-          let pw = 0; for (const [name, rows] of Object.entries(fires)) { const p = lin(rows, t); pw = Math.max(pw, p); stk.fires[name](p, 1, 1); }
+          let pw = 0; for (const [name, rows] of Object.entries(fires)) { const p = lin(rows, t); pw = Math.max(pw, p); stk.fires[name](p, 0); }
           P.arms(sm(arms[0], arms[1], t));
           if (P.sea) P.sea.update(c);
           const hb = st.pos.y - P.deck - foot;
@@ -3516,9 +3304,9 @@ void main() {
           return { pos, t, km: h.alt };
         },
         update(s, st, dt) {
-          const t = st.t, alt = st.km, wd = 1 + 2.4 * sm(12, 90, alt), ln = 1 + 1.6 * sm(12, 90, alt);
-          let pw = 0; for (const [name, rows] of Object.entries(fires)) { const p = lin(rows, t); if (["m1d", "f1", "booster", "srb", "rs25"].includes(name)) pw = Math.max(pw, p); stk.fires[name](p, wd, ln); }
-          stage(t);
+          const t = st.t, alt = st.km, thin = 1 - Math.exp(-alt / 25); // how far the air has thinned: plumes balloon
+          stage(t); // parts first: a plume may stop at the stage below it
+          let pw = 0; for (const [name, rows] of Object.entries(fires)) { const p = lin(rows, t); if (["m1d", "f1", "booster", "srb", "rs25"].includes(name)) pw = Math.max(pw, p); stk.fires[name](p, thin); }
           if (vap) { const k = sm(vapor[0], vapor[0] + 2, t) * (1 - sm(vapor[1] - 2, vapor[1], t)); vap.material.opacity = 0.35 * k * (0.8 + 0.2 * Math.random()); vap.visible = k > 0.01; }
           const tk = pw * (1 - sm(8, 38, alt)), w0 = stk.len * 0.06;
           for (const sp of puffs) { const i = sp.userData.i, d = 6 + 9 * i + 0.6 * i * i, r = w0 * (1 + 0.08 * i) * (1 + alt * 0.08); sp.visible = tk > 0.02; sp.position.set(Math.sin(i * 1.7) * r * 0.15, -d, Math.cos(i * 2.3) * r * 0.15); sp.scale.setScalar(r * 2.4); sp.material.opacity = 0.5 * tk * (1 - i / 48); }
@@ -3572,7 +3360,7 @@ void main() {
           m.hold.rotation.set(0, 0, ang);
           if (m.glow) m.glow(entryGlow(s, []), c);
           const burn = fx.includes("burn") ? 1 : 0;
-          if (m.fire) m.fire(burn, 1 + (h.alt > 100 ? 1.5 : 0), 1);
+          if (m.fire) m.fire(burn, 1 - Math.exp(-h.alt / 25));
           if (m.rcs) m.rcs(burn ? 0.4 : 0.03);
           const k1 = fx.includes("chute1") ? 1 : 0, k2 = fx.includes("chute2") ? 1 : 0;
           kc = m.top === undefined ? 0 : Math.max(k1 * 0.4, k2);
@@ -3597,14 +3385,13 @@ void main() {
         const st = iss(), d = crewDragon(), g = new THREE.Group(); g.add(st.root, dockAt(d, 3.47)); st.wings.forEach((w) => (w.rotation.x = 0.55));
         const m = add({ root: g }, 0, 70, { fixed: true, title: "Docked to the International Space Station" }); g.position.x = -18; return m;
       }
-      if (n === "ship") { const v = starshipShip(); const all = (p, w, l) => v.fires.forEach((f) => f(p, w, l)); return add(v, 25, 50, { fire: all, title: "Starship · in orbit" }); }
+      if (n === "ship") { const v = starshipShip(); const all = (p, th) => { v.fireRVac(p, th); v.fireRSL(p * 0.8, th); }; return add(v, 26, 52, { fire: all, title: "Starship · in orbit" }); }
       if (n === "csmlm" || n === "csmasc") {
         const g = new THREE.Group(), csm = apolloCSM(), lm = lunarModule(); g.add(csm.root, lm.root);
         lm.root.rotation.z = Math.PI; lm.root.position.y = csm.top + 6.3; if (n === "csmasc") lm.desc.visible = false;
-        const sps = plume(csm.root, 0, -7.0, 0, 1.2, 18, "#ffe0b8", { spread: 3, opacity: 0.3 });
-        return add({ root: g }, 1.5, 18, { fire: sps, rcs: csm.rcs, title: n === "csmlm" ? "Columbia and Eagle · docked" : "Columbia with Eagle's ascent stage" });
+        return add({ root: g }, 1.5, 18, { fire: csm.fire, rcs: csm.rcs, title: n === "csmlm" ? "Columbia and Eagle · docked" : "Columbia with Eagle's ascent stage" });
       }
-      if (n === "csm") { const v = apolloCSM(); const sps = plume(v.root, 0, -7.0, 0, 1.2, 18, "#ffe0b8", { spread: 3, opacity: 0.3 }); return add(v, -1.9, 11, { fire: sps, rcs: v.rcs, title: "Columbia · command and service module" }); }
+      if (n === "csm") { const v = apolloCSM(); return add(v, -1.9, 11, { fire: v.fire, rcs: v.rcs, title: "Columbia · command and service module" }); }
       if (n === "lm") { const v = lunarModule(); return add(v, 3.4, 8, { fire: v.fire, rcs: v.rcs, title: "Eagle · lunar module" }); }
       if (n === "lmasc") { const v = lunarModule(); v.desc.visible = false; return add(v, 4.6, 5, { fire: v.afire, rcs: v.rcs, title: "Eagle · ascent stage" }); }
       if (n === "apolloCm") { const v = apolloCM(); return add(v, 1.4, 4.5, { top: v.top, R: v.R, hot: "#ff6a26", plen: 22, title: "Columbia · command module" }); }
@@ -3617,7 +3404,7 @@ void main() {
     // each scene: { chase, focus, shadow, sunDir, events, tilt, ground(t), update(t, s, dt), root | place(t), reset, info, space, spin, zoom }
     const SCENES = {
       // ---- launch and ascent, one pad shot and one ascent shot per vehicle (times = mission seconds)
-      f9pad: () => padScene({ pad: padF9, stk: f9Stack(), rel: 0, a: 3.56, fires: { m1d: [[-3, 0], [-1.2, 1]] }, focus: 35, chase: [62, 4, 118] }),
+      f9pad: () => padScene({ pad: padF9, stk: f9Stack(), rel: 0, a: 3.56, foot: 0.4, fires: { m1d: [[-3, 0], [-1.2, 1]] }, focus: 33, chase: [62, 4, 118] }),
       f9asc() {
         const s = f9Stack();
         return ascentScene({
@@ -3625,7 +3412,7 @@ void main() {
           fires: { m1d: [[-3, 0], [-1.2, 1], [149.6, 1], [150.6, 0]], mvac: [[160, 0], [162, 1], [527.5, 1], [528.5, 0]] },
           seps: [[153, "booster", { v: -1.5, a: -9, spin: [0, 0, 0.07], pivot: 25, hide: 70 }], [700, "s2", { v: -0.35, a: -0.04, spin: [0.004, 0, 0.007], pivot: 55, hide: 300 }]],
           foc: [[-1e9, 35], [153, 35], [165, 57], [700, 57], [712, 66.5]], zm: [[-1e9, 1], [153, 1], [170, 0.5], [700, 0.5], [715, 0.17]],
-          extra: (t) => { s.dragon.setNose(sm(730, 744, t)); s.dragon.dracos(t > 700 && t < 716 ? 0.4 : 0); },
+          extra: (t) => { s.dragon.setNose(sm(730, 744, t)); s.dragon.dracos(t > 700 && t < 716 ? 0.4 : 0); s.booster.fins(sm(166, 172, t)); },
         });
       },
       shpad: () => padScene({ pad: padStarbase, stk: starshipStack(), rel: 0, a: 3.33, dirs: null, fires: { booster: [[-4, 0], [-0.8, 1]] }, focus: 61, chase: [120, 6, 200] }),
@@ -3633,18 +3420,18 @@ void main() {
         const s = starshipStack();
         return ascentScene({
           stk: s, chase: [95, -16, 190], vapor: [52, 62, 66, 4.9], spot: [0.23, 0.644],
-          fires: { booster: [[-4, 0], [-0.8, 1], [158.5, 1], [159.5, 0.15], [164.5, 0.15], [165, 0]], ship: [[161.5, 0], [163, 1], [514.5, 1], [515.5, 0]], rvac: [[161.5, 0], [163, 1], [514.5, 1], [515.5, 0]] },
+          fires: { booster: [[-4, 0], [-0.8, 1], [158.5, 1], [159.5, 0.15], [164.5, 0.15], [165, 0]], ship: [[161.5, 0], [163, 1], [514.5, 1], [515.5, 0]], rvac: [[161.5, 0], [163, 1], [514.5, 1], [515.5, 0]], hsr: [[161.5, 0], [162.2, 1], [164.6, 1], [165.4, 0]] },
           seps: [[165, "booster", { v: -2, a: -14, spin: [0, 0, 0.09], pivot: 36, hide: 60 }]],
           foc: [[-1e9, 61], [165, 61], [178, 97]], zm: [[-1e9, 1], [165, 1], [180, 0.5]],
         });
       },
-      svpad: () => padScene({ pad: padSaturn, stk: saturnV(), rel: 0.3, a: 2.72, foot: -5, fires: { f1: [[-8.9, 0], [-6, 1]] }, arms: [-1, 4], focus: 55, chase: [105, 6, 200] }),
+      svpad: () => padScene({ pad: padSaturn, stk: saturnV(), rel: 0.3, a: 2.72, foot: -4, fires: { f1: [[-8.9, 0], [-6, 1]] }, arms: [-1, 4], focus: 55, chase: [105, 6, 200] }),
       svasc() {
         const s = saturnV(), base = s.parts.csm.position.y;
         return ascentScene({
           stk: s, chase: [90, -14, 180], vapor: [66, 76, 60, 5.6],
           fires: { f1: [[-8.9, 0], [-6, 1], [135, 1], [135.5, 0.8], [160.5, 0.8], [161, 0]], j2: [[163, 0], [166, 1], [547.5, 1], [548.5, 0]], s4: [[551, 0], [552.5, 1], [699, 1], [700, 0], [9856, 0], [9858, 1], [10202, 1], [10203, 0]], les: [[197, 0], [197.2, 1], [200, 0]] },
-          seps: [[161, "s1", { v: -2, a: -14, spin: [0.01, 0, 0.02], pivot: 26, hide: 60 }], [191, "inter", { v: -0.5, a: -8, spin: [0, 0.05, 0.02], pivot: 50, hide: 30 }], [197, "les", { v: 3, a: 40, spin: [0, 0, 0.05], pivot: 110, hide: 12 }], [548, "s2", { v: -1, a: -10, spin: [0.005, 0, 0.012], pivot: 62, hide: 80 }]],
+          seps: [[161, "s1", { v: -2, a: -14, spin: [0.01, 0, 0.02], pivot: 23, hide: 60 }], [191, "inter", { v: -0.5, a: -8, spin: [0, 0.05, 0.02], pivot: 43.7, hide: 30 }], [197, "les", { v: 3, a: 40, spin: [0, 0, 0.05], pivot: 106, hide: 12 }], [548, "s2", { v: -1, a: -10, spin: [0.005, 0, 0.012], pivot: 56, hide: 80 }]],
           foc: [[-1e9, 55], [161, 55], [176, 82], [548, 82], [562, 92], [11700, 92], [11900, 104]], zm: [[-1e9, 1], [161, 1], [178, 0.75], [548, 0.75], [565, 0.4], [11700, 0.4], [11900, 0.55]],
           extra(t) {
             // CSM separation: the adapter petals open and drift off, Columbia backs out ~28 m and turns round to face Eagle
@@ -3652,19 +3439,19 @@ void main() {
             csm.position.y = base + (u < 0 ? 0 : 28 * sm(0, 260, u));
             csm.rotation.x = Math.PI * sm(300, 700, u);
             s.csm.rcs(u > 0 && u < 720 ? 0.15 : 0);
-            s.petals.forEach(({ hg, pv }) => { pv.rotation.x = 0.85 * sm(0, 14, u); const w = Math.max(0, u - 14); pv.position.z = 2.95 + 0.4 * w; pv.position.y = 0.1 * w; hg.visible = w < 900; });
+            s.petals.forEach(({ hg, pv, r0 }) => { pv.rotation.x = 0.85 * sm(0, 14, u); const w = Math.max(0, u - 14); pv.position.z = r0 + 0.4 * w; pv.position.y = 0.1 * w; hg.visible = w < 900; });
           },
         });
       },
-      slspad: () => padScene({ pad: padSLS, stk: slsStack(), rel: 0, a: 4.44, foot: 3.6, fires: { rs25: [[-6.4, 0], [-5, 1]], srb: [[-0.2, 0], [0.2, 1]] }, focus: 46, chase: [100, 6, 185] }),
+      slspad: () => padScene({ pad: padSLS, stk: slsStack(), rel: 0, a: 4.44, foot: 0, fires: { rs25: [[-6.4, 0], [-5, 1]], srb: [[-0.2, 0], [0.2, 1]] }, focus: 50, chase: [100, 6, 185] }),
       slsasc() {
         const s = slsStack();
-        const panel = (i) => { const a = s.saj[i].userData.a; return [195, "saj" + i, { v: -0.6, a: -5, side: [Math.sin(a) * 4, Math.cos(a) * 4], spin: [Math.cos(a) * 0.5, 0, -Math.sin(a) * 0.5], pivot: 78.3, hide: 20 }]; };
+        const panel = (i) => { const a = s.saj[i].userData.a; return [195, "saj" + i, { v: -0.6, a: -5, side: [Math.sin(a) * 4, Math.cos(a) * 4], spin: [Math.cos(a) * 0.5, 0, -Math.sin(a) * 0.5], pivot: 83.3, hide: 20 }]; };
         return ascentScene({
           stk: s, chase: [85, -14, 170], vapor: [50, 62, 52, 4.6],
           fires: { rs25: [[-6.4, 0], [-5, 1], [483.5, 1], [484.5, 0]], srb: [[-0.2, 0], [0.2, 1], [108, 1], [128, 0.25], [131, 0]], las: [[200, 0], [200.3, 1], [203, 0]], rl10: [[2940, 0], [2941, 1], [2962, 1], [2963, 0], [6480, 0], [6481, 1], [7380, 1], [7381, 0]] },
-          seps: [[132, "srbL", { v: -1, a: -6, side: [-3, 0], spin: [0, 0, 0.04], pivot: 22, hide: 60 }], [132, "srbR", { v: -1, a: -6, side: [3, 0], spin: [0, 0, -0.04], pivot: 22, hide: 60 }], panel(0), panel(1), panel(2), [200, "las", { v: 3, a: 35, spin: [0, 0, 0.04], pivot: 88, hide: 12 }], [496, "core", { v: -0.6, a: -1.2, spin: [0.004, 0, 0.008], pivot: 32, hide: 300 }]],
-          foc: [[-1e9, 46], [496, 46], [508, 72]], zm: [[-1e9, 1], [132, 1], [150, 0.9], [496, 0.9], [510, 0.36]],
+          seps: [[132, "srbL", { v: -1, a: -6, side: [-3, 0], spin: [0, 0, 0.04], pivot: 27, hide: 60 }], [132, "srbR", { v: -1, a: -6, side: [3, 0], spin: [0, 0, -0.04], pivot: 27, hide: 60 }], panel(0), panel(1), panel(2), [200, "las", { v: 3, a: 35, spin: [0, 0, 0.04], pivot: 93, hide: 12 }], [496, "core", { v: -0.6, a: -1.2, spin: [0.004, 0, 0.008], pivot: 37, hide: 300 }]],
+          foc: [[-1e9, 51], [496, 51], [508, 77]], zm: [[-1e9, 1], [132, 1], [150, 0.9], [496, 0.9], [510, 0.36]],
           extra: (t) => s.o.arrays(sm(1100, 1330, t)),
         });
       },
@@ -3689,7 +3476,9 @@ void main() {
         for (const s of [-1, 1]) box(6, 6, 6, std("#5a5f66"), ship, 40, 6, s * 18);
         for (const [x, z] of [[-40, -22], [-40, 22], [40, -22], [40, 22]]) box(5, 5, 5, std("#22252a"), ship, x, -2.5, z);
         rod([42, 9, 18], [42, 18, 18], 0.15, std("#aaa"), ship);
-        const v = falcon9Booster(); world.add(v.root);
+        // the booster hangs from its holder by its feet (the legs' pads), so touchdown is holder height = deck
+        const v = falcon9Booster(), hold = new THREE.Group(); hold.add(v.root); v.root.position.y = -v.legFoot; world.add(hold); v.fins(1);
+        exhFloor.y = 3;
         const spray = particles({ color: "#e9eef3", size: 5, drag: 0.9, rise: 2.5, gravity: 0, life: 5, opacity: 0.28 });
         const legs = [[13.5, 0], [15.5, 1]], thr = [[0, 0], [6.9, 0], [7.4, 1], [13.8, 0.75], [17.2, 0.5], [17.6, 0]];
         let clock = 0;
@@ -3702,10 +3491,10 @@ void main() {
             clock += dt; sea.update(clock);
             ship.position.y = 0.25 * Math.sin(clock * 0.7); ship.rotation.x = 0.006 * Math.sin(clock * 0.5);
             v.legs(lin(legs, t));
-            const p = lin(thr, t); v.fire(p);
+            const p = lin(thr, t); v.fire(p, 0);
             spray.step(dt, { x: s.pos.x, y: 3.3, z: s.pos.z, r0: 2, rate: s.h < 45 ? p * 500 * (1 - s.h / 45) : 0, speed: 28, up: 6 });
           },
-          root: v.root,
+          root: hold,
         };
       },
 
@@ -3740,7 +3529,7 @@ void main() {
         const sunDir = V3(0.6, 0.7, 0.5).normalize();
         earthSky(sunDir);
         const base = starbase();
-        const v = superHeavy(); world.add(v.root);
+        const v = superHeavy({ frost: false, flown: true }); world.add(v.root);
         const steam = particles({ color: "#eef1f4", size: 9, drag: 0.7, rise: 3, gravity: 0, life: 7, opacity: 0.25 });
         const t13 = [[0, 0], [6.9, 0], [7.4, 1], [14.6, 1], [15.2, 0]], t3 = [[0, 0], [6.9, 0], [7.4, 1], [30.4, 0.6], [30.8, 0]], open = [[26, 1], [29, 0]];
         let c = 0;
@@ -3753,7 +3542,7 @@ void main() {
             c += dt; base.sea.update(c);
             base.arms(lin(open, t) * 32 * D2R);
             const p13 = lin(t13, t), p3 = lin(t3, t);
-            v.fires.forEach((f, i) => f(i < 3 ? p3 : p13));
+            v.fire13(p13); v.fire3(p13 > 0.02 ? 0 : p3);
             steam.step(dt, { x: s.pos.x, y: 0.5, z: s.pos.z, r0: 8, rate: s.h < 160 ? Math.max(p3, p13) * 600 * (1 - s.h / 160) : 0, speed: 35, up: 8 });
           },
           root: v.root,
@@ -3769,7 +3558,7 @@ void main() {
         v.door.material = std("#020203", { roughness: 1 });
         const satM = [std("#b8bcc4", { metalness: 0.7, roughness: 0.3 }), std("#ffffff", { map: cells("slcells", "#101a33", "#3a3f4a", 6, 10), metalness: 0.4, roughness: 0.3 })];
         const sats = Array.from({ length: 9 }, (_, i) => { const g = new THREE.Group(); world.add(g); box(4.1, 0.28, 2.7, satM[0], g, 0, 0, 0); box(4.0, 0.02, 2.6, satM[1], g, 0, 0.15, 0); g.userData.t = 6 + i * 6.2; g.userData.spin = (Math.random() - 0.5) * 0.06; return g; });
-        const door = V3(5.5, 4.4, 0);
+        const door = V3(12.6, 4.6, 0);
         return {
           chase: [-22, 34, 30], focus: 4, shadow: 50, sunDir, space: true, spin: 0.003,
           events: [[0, "Coasting in orbit · the Pez-dispenser door is open"], [6, "Starlink satellites slide out one at a time"], [30, "Each one drifts clear before the next is released"], [56, "Payload deployed"]],
@@ -3836,7 +3625,7 @@ void main() {
             c += dt; base.sea.update(c);
             base.arms(lin(open, t) * 32 * D2R);
             v.flaps(t < 11 ? 0.25 * Math.sin(c * 0.6) : 0, c);
-            const p = lin(thr, t); v.fires.forEach((f) => f(p));
+            const p = lin(thr, t); v.fireRSL(p);
             const by = s.h - 20;
             steam.step(dt, { x: s.pos.x, y: 0.5, z: s.pos.z, r0: 6, rate: by < 120 ? p * 400 * (1 - by / 120) : 0, speed: 25, up: 6 });
           },
@@ -4102,6 +3891,7 @@ void main() {
       // a seek jumps further than a frame can at this speed: don't let the particles see it as elapsed time
       const fwd = lastS !== null && s > lastS, dt = fwd && s - lastS <= info.speed(t) * 0.25 ? s - lastS : 0;
       if (fwd) G.rt += rdt;
+      G.clock.value = G.rt;
       lastS = s;
       // every cut is the same quick fade up from black, and only while playing (a paused seek shows the frame at once)
       G.renderer.domElement.style.opacity = info.playing() ? Math.min(1, (now - cutAt) / 350).toFixed(3) : "1";
@@ -4112,6 +3902,795 @@ void main() {
       adapt(now);
     },
   };
+};
+function makeModels(K) {
+  const { THREE, X, V3, TAU, D2R, std, mesh, cyl, lathe, box, rod, tex, once, rng, exhaust, thrusters } = K;
+  const NS = THREE.NoColorSpace;
+
+  // ---------------------------------------------------------------- kit
+  // a group sitting on a body of revolution at angle a, radius r, height y: local +z points out of the skin, +x along it
+  function skin(parent, a, r, y) { const g = new THREE.Group(); g.position.set(Math.sin(a) * r, y, Math.cos(a) * r); g.rotation.y = a; parent.add(g); return g; }
+  // canvas texture cached for every scene; normal(...) turns a height drawing into a tangent-space normal map
+  const ctex = (key, w, h, draw, o = {}) => once(key, () => { const t = tex(w, h, draw, o.repeat, o.srgb !== false); if (o.flip === false) t.flipY = false; return t; });
+  function normal(key, w, h, draw, k = 2, repeat) {
+    return once(key, () => {
+      const c = document.createElement("canvas"); c.width = w; c.height = h;
+      const g = c.getContext("2d"); draw(g, w, h);
+      const src = g.getImageData(0, 0, w, h).data, out = g.createImageData(w, h), o = out.data, H = (x, y) => src[(((y + h) % h) * w + ((x + w) % w)) * 4] / 255;
+      for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+        const dx = (H(x + 1, y) - H(x - 1, y)) * k, dy = (H(x, y + 1) - H(x, y - 1)) * k, n = 1 / Math.hypot(dx, dy, 1), i = (y * w + x) * 4;
+        o[i] = (0.5 - dx * n * 0.5) * 255; o[i + 1] = (0.5 + dy * n * 0.5) * 255; o[i + 2] = n * 255; o[i + 3] = 255;
+      }
+      g.putImageData(out, 0, 0);
+      const t = new THREE.CanvasTexture(c); t.colorSpace = NS; t.anisotropy = 8;
+      if (repeat) { t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(...repeat); }
+      return t;
+    });
+  }
+  // merge many small parts into one mesh (one draw call): add(geometry, x, y, z, rx, ry, rz)
+  function batch(mat, parent) {
+    const list = [], m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), one = V3(1, 1, 1);
+    return {
+      add(geo, x = 0, y = 0, z = 0, rx = 0, ry = 0, rz = 0) { const g = geo.index ? geo.toNonIndexed() : geo.clone(); g.applyMatrix4(m4.compose(V3(x, y, z), q.setFromEuler(e.set(rx, ry, rz, "YXZ")), one)); delete g.attributes.uv2; list.push(g); return this; },
+      addTo(frame, geo, x = 0, y = 0, z = 0, rx = 0, ry = 0, rz = 0) { frame.updateMatrixWorld(true); const g = geo.index ? geo.toNonIndexed() : geo.clone(); g.applyMatrix4(m4.compose(V3(x, y, z), q.setFromEuler(e.set(rx, ry, rz, "YXZ")), one)).applyMatrix4(frame.matrix); list.push(g); return this; },
+      done() { const m = mesh(X.mergeGeometries(list), mat, parent); list.length = 0; return m; },
+    };
+  }
+  // a box tapering from w0 x d0 at y = 0 to w1 x d1 at y = h, its back (z = 0) flat
+  function taper(w0, d0, w1, d1, h) {
+    const g = new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0.5), p = g.attributes.position;
+    for (let i = 0; i < p.count; i++) { const t = p.getY(i); p.setXYZ(i, p.getX(i) * (w0 + (w1 - w0) * t), t * h, p.getZ(i) * (d0 + (d1 - d0) * t)); }
+    g.computeVertexNormals(); return g;
+  }
+  // profile [[r, y], ...] turned round the axis
+  const latheGeo = (pts, seg = 64) => new THREE.LatheGeometry(pts.map(([r, y]) => new THREE.Vector2(Math.max(r, 1e-4), y)), seg);
+  // artwork painted on a body of revolution: a curved slice of radius r (rb at the bottom) between y0 and y1, centred
+  // on angle a and `arc` radians wide; draw(g, w, h) paints a transparent canvas
+  function decal(parent, r, y0, y1, a, arc, w, hh, draw, rb = r) {
+    const m = mesh(new THREE.CylinderGeometry(r, rb, y1 - y0, 32, 1, true, a - arc / 2, arc), new THREE.MeshStandardMaterial({ map: tex(w, hh, draw), transparent: true, alphaTest: 0.04, roughness: 0.5, polygonOffset: true, polygonOffsetFactor: -2 }), parent, 0, (y0 + y1) / 2, 0);
+    m.castShadow = false; return m;
+  }
+  // the same, sized in metres: `width` across the skin, the canvas at ppm pixels per metre so the art keeps its shape
+  const label = (parent, r, y0, y1, a, width, draw, ppm = 64, rb = r) => decal(parent, r, y0, y1, a, width / r, Math.max(8, Math.round(width * ppm)), Math.max(8, Math.round((y1 - y0) * ppm)), draw, rb);
+  // a word turned on its side, reading top to bottom
+  const rtext = (txt, col, font, sx = 1) => (g, w, hh) => { g.save(); g.font = font; const k = Math.min(1, (hh * 0.94) / (g.measureText(txt).width * sx)); g.translate(w / 2, hh / 2); g.rotate(Math.PI / 2); g.scale(sx * k, k); g.fillStyle = col; g.textAlign = "center"; g.textBaseline = "middle"; g.fillText(txt, 0, 0); g.restore(); };
+  // letters stacked top to bottom, upright, as big as the panel allows
+  const vtext = (txt, col, weight = 800, family = "Helvetica,Arial,sans-serif") => (g, w, hh) => { const n = txt.length, size = Math.min((hh / n) * 0.9, w * 1.05); g.fillStyle = col; g.font = `${weight} ${size}px ${family}`; g.textAlign = "center"; g.textBaseline = "middle"; for (let i = 0; i < n; i++) g.fillText(txt[i], w / 2, ((i + 0.5) * hh) / n); };
+  function flag(g, x, y, w, hh) {
+    for (let i = 0; i < 13; i++) { g.fillStyle = i % 2 ? "#fff" : "#b22234"; g.fillRect(x, y + (i * hh) / 13, w, hh / 13 + 0.5); }
+    g.fillStyle = "#3c3b6e"; g.fillRect(x, y, w * 0.4, (hh * 7) / 13);
+    g.fillStyle = "#fff"; for (let i = 0; i < 50; i++) g.fillRect(x + w * 0.02 + (i % 10) * w * 0.037, y + hh * 0.03 + Math.floor(i / 10) * hh * 0.1, w * 0.012, hh * 0.03);
+  }
+  const flagArt = (g, w, hh) => flag(g, 0, 0, w, hh);
+  // the flag turned on its side (stripes running down the rocket), as flown on the boosters
+  const flagSide = (g, w, hh) => { g.save(); g.translate(0, hh); g.rotate(-Math.PI / 2); flag(g, 0, 0, hh, w); g.restore(); };
+  function meatball(g, cx, cy, r) {
+    g.fillStyle = "#0b3d91"; g.beginPath(); g.arc(cx, cy, r, 0, TAU); g.fill();
+    g.strokeStyle = "#fff"; g.lineWidth = r * 0.03; g.beginPath(); g.ellipse(cx, cy, r * 0.75, r * 0.28, -0.35, 0, TAU); g.stroke();
+    g.fillStyle = "#fc3d21"; g.beginPath(); g.moveTo(cx - r * 0.9, cy + r * 0.35); g.quadraticCurveTo(cx, cy - r * 0.05, cx + r * 0.85, cy - r * 0.55); g.lineTo(cx + r * 0.2, cy - r * 0.05); g.quadraticCurveTo(cx - r * 0.2, cy + r * 0.2, cx - r * 0.9, cy + r * 0.35); g.fill();
+    g.fillStyle = "#fff"; g.font = `bold ${r * 0.42}px Helvetica,Arial,sans-serif`; g.textAlign = "center"; g.textBaseline = "middle"; g.fillText("NASA", cx, cy + r * 0.02);
+  }
+  // NASA's "worm" logotype as stroked letters (no crossbars on the A's), h tall, centred on (cx, cy); vertical turns it
+  // to read top to bottom down the side of a booster
+  function worm(g, cx, cy, h, { vertical = false, down = false, col = "#d9262c" } = {}) {
+    const w = h * 0.86, gap = h * 0.24, x = (i) => i * (w + gap), total = x(3) + w;
+    const N = (o) => `M${o} ${h}V${h * 0.3}Q${o} 0 ${o + w * 0.32} ${h * 0.18}L${o + w * 0.68} ${h * 0.82}Q${o + w} ${h} ${o + w} ${h * 0.7}V0`;
+    const A = (o) => `M${o} ${h}L${o + w * 0.36} ${h * 0.14}Q${o + w / 2} ${-h * 0.12} ${o + w * 0.64} ${h * 0.14}L${o + w} ${h}`;
+    const S = (o) => `M${o + w} ${h * 0.02}H${o + w * 0.32}Q${o} ${h * 0.02} ${o} ${h * 0.27}Q${o} ${h * 0.5} ${o + w * 0.32} ${h * 0.5}H${o + w * 0.68}Q${o + w} ${h * 0.5} ${o + w} ${h * 0.74}Q${o + w} ${h * 0.98} ${o + w * 0.68} ${h * 0.98}H${o}`;
+    g.save(); g.translate(cx, cy); if (vertical) g.rotate(down ? Math.PI / 2 : -Math.PI / 2); g.translate(-total / 2, -h / 2);
+    g.strokeStyle = col; g.lineWidth = h * 0.22; g.lineCap = g.lineJoin = "round"; g.stroke(new Path2D(N(x(0)) + A(x(1)) + S(x(2)) + A(x(3)))); g.restore();
+    return total;
+  }
+  // SpaceX's wordmark, approximated: heavy wide italic capitals with the swoosh through the X
+  function spacex(g, cx, cy, h, col = "#101214", vertical = true) {
+    g.save(); g.translate(cx, cy); if (vertical) g.rotate(-Math.PI / 2); // reads bottom to top, as on the rocket
+    g.font = `italic 900 ${h}px 'Arial Black','Segoe UI Black',Arial,sans-serif`; g.textAlign = "center"; g.textBaseline = "middle"; g.fillStyle = col;
+    g.scale(1.25, 1); const tw = g.measureText("SPACEX").width; g.fillText("SPACEX", 0, h * 0.04);
+    g.lineWidth = h * 0.07; g.strokeStyle = col; g.beginPath(); g.moveTo(tw * 0.18, h * 0.32); g.quadraticCurveTo(tw * 0.42, -h * 0.05, tw * 0.62, -h * 0.55); g.stroke();
+    g.restore();
+  }
+  // a rocket engine bell hanging below y = 0 is its exit; outer skin, a dark inside that glows (emissive) while it
+  // fires, and a lip ring. rf(f) = radius at fraction f of the visible length up from the exit.
+  function bellGeo(key, rExit, rTop, len, k = 0.8, seg = 40) {
+    return once("bell:" + key, () => latheGeo(Array.from({ length: 17 }, (_, i) => { const f = i / 16; return [rExit - (rExit - rTop) * Math.pow(f, k), f * len]; }), seg));
+  }
+  function engineMats(outer, inside, glow) {
+    return {
+      out: std(outer, { metalness: 0.75, roughness: 0.38 }),
+      in: std(inside, { metalness: 0.5, roughness: 0.6, side: THREE.BackSide, emissive: new THREE.Color(glow), emissiveIntensity: 0 }),
+    };
+  }
+  function bell(parent, geo, mats, x, y, z, lip) {
+    const a = mesh(geo, mats.out, parent, x, y, z), b = mesh(geo, mats.in, parent, x, y, z);
+    b.castShadow = false;
+    if (lip) mesh(once("lip" + lip, () => new THREE.TorusGeometry(lip, lip * 0.035, 6, 40).rotateX(Math.PI / 2)), mats.out, parent, x, y + lip * 0.02, z);
+    return a;
+  }
+
+  // ---------------------------------------------------------------- Falcon 9 Block 5 and Crew Dragon
+  // metres from the Merlin exit plane: bells to 1.4, base heat shield, white tanks to 41.2, black interstage to 47.7 with
+  // the grid fins and cold-gas pods at its top, second stage to 57.6, Crew Dragon's trunk to 61.2, the capsule to 65.7
+  const F9 = { R: 1.83, bell: 1.45, base: 1.9, tank: 41.2, is: 47.7, mvExit: 43.6, s2: 57.6 };
+  const XANG = [Math.PI / 4, (3 * Math.PI) / 4, (5 * Math.PI) / 4, (7 * Math.PI) / 4]; // legs and grid fins in an X
+  const f9Body = () => ctex("f9body", 1024, 2048, (g, w, h) => {
+    // a flight-proven booster: white paint, faint barrel welds, soot from its entry and landing burns, darker toward
+    // the top (under the interstage) and the base, in streaks that run down the tank
+    const Y = (y) => (1 - (y - F9.base) / (F9.tank - F9.base)) * h, r = rng(9);
+    g.fillStyle = "#f3f4f5"; g.fillRect(0, 0, w, h);
+    g.fillStyle = "rgba(60,64,70,.07)"; for (let y = 4.4; y < F9.tank; y += 2.75) g.fillRect(0, Y(y), w, 3);
+    g.fillStyle = "rgba(60,64,70,.12)"; g.fillRect(0, Y(16.9), w, 4); // the common dome between RP-1 and LOX
+    const band = (ya, yb, a0, a1) => { const gr = g.createLinearGradient(0, Y(ya), 0, Y(yb)); gr.addColorStop(0, `rgba(34,29,24,${a0})`); gr.addColorStop(1, `rgba(34,29,24,${a1})`); g.fillStyle = gr; g.fillRect(0, Y(ya), w, Y(yb) - Y(ya)); };
+    band(F9.tank, 33, 0.78, 0); band(F9.base, 6.5, 0.6, 0);
+    for (let i = 0; i < 420; i++) {
+      const x = r() * w, top = r() < 0.75, len = (top ? 3 + 14 * r() * r() : 1 + 5 * r()) * (h / (F9.tank - F9.base)), y0 = top ? Y(F9.tank) - 10 : Y(F9.base) - len;
+      const gr = g.createLinearGradient(0, y0, 0, y0 + len); const a = 0.05 + 0.32 * r() * r();
+      gr.addColorStop(top ? 0 : 1, `rgba(30,26,22,${a})`); gr.addColorStop(top ? 1 : 0, "rgba(30,26,22,0)");
+      g.fillStyle = gr; g.fillRect(x, y0, 2 + 9 * r(), len);
+    }
+  });
+  const f9Rough = () => ctex("f9rough", 256, 512, (g, w, h) => { // soot is matte, paint has a sheen (green channel)
+    g.drawImage(f9Body().image, 0, 0, w, h); const d = g.getImageData(0, 0, w, h); for (let i = 0; i < d.data.length; i += 4) { const v = 90 + (255 - d.data[i]) * 1.6; d.data[i] = d.data[i + 1] = d.data[i + 2] = Math.min(235, v); } g.putImageData(d, 0, 0);
+  }, { srgb: false });
+  // a titanium grid fin: frame and diamond lattice, its hinge on the bottom edge at the origin, lying in the x-y plane
+  // (x along the hinge, y away from it, thickness along z)
+  function gridFinGeo(key, W, Hh, T, cell) {
+    return once("grid:" + key, () => {
+      const parts = [], add = (g, x, y, rz) => { const q = g.toNonIndexed(); q.applyMatrix4(new THREE.Matrix4().makeRotationZ(rz)).translate(x, y, 0); delete q.attributes.uv; parts.push(q); };
+      const bar = (L, w, t) => new THREE.BoxGeometry(L, w, t);
+      add(bar(W, 0.07, T), 0, 0.035, 0); add(bar(W, 0.07, T), 0, Hh - 0.035, 0); add(bar(0.07, Hh, T), -W / 2 + 0.035, Hh / 2, 0); add(bar(0.07, Hh, T), W / 2 - 0.035, Hh / 2, 0);
+      // diagonals across the frame at ±45°, each clipped to the rectangle
+      for (const s of [1, -1]) for (let c = -(W + Hh); c <= W + Hh; c += cell) {
+        const pts = [];
+        for (const x of [-W / 2, W / 2]) { const y = (c - s * x) ; if (y >= 0 && y <= Hh) pts.push([x, y]); }
+        for (const y of [0, Hh]) { const x = s * (c - y); if (x >= -W / 2 && x <= W / 2) pts.push([x, y]); }
+        if (pts.length < 2) continue;
+        const [[x0, y0], [x1, y1]] = pts, L = Math.hypot(x1 - x0, y1 - y0);
+        if (L < 0.05) continue;
+        add(bar(L, 0.016, T * 0.9), (x0 + x1) / 2, (y0 + y1) / 2, Math.atan2(y1 - y0, x1 - x0));
+      }
+      return X.mergeGeometries(parts);
+    });
+  }
+  // the booster alone; root origin = Merlin exit plane. legs(k): 0 stowed .. 1 deployed; fins(k): 0 stowed .. 1 out;
+  // fire(p, thin): the centre engine (entry and landing burns); all9(p, thin): the whole cluster (launch)
+  function falcon9Booster() {
+    const root = new THREE.Group(), R = F9.R;
+    const white = std("#ffffff", { map: f9Body(), roughnessMap: f9Rough(), roughness: 1 });
+    const carbon = std("#151619", { roughness: 0.55, metalness: 0.15 }), shield = std("#26231f", { roughness: 0.9 });
+    cyl(R, R, F9.base, F9.tank, white, root, 96, true);
+    // interstage: black composite, a ring of rivet lines at each end
+    const ist = cyl(R + 0.02, R + 0.02, F9.tank, F9.is, std("#17181b", { roughness: 0.45, metalness: 0.2, normalMap: normal("f9isN", 512, 256, (g, w, h) => { g.fillStyle = "#808080"; g.fillRect(0, 0, w, h); g.fillStyle = "#606060"; for (let x = 0; x < w; x += w / 24) g.fillRect(x, 0, 2, h); for (const y of [0.04, 0.96]) g.fillRect(0, y * h, w, 2); }, 1.5) }), root, 96, true);
+    ist.receiveShadow = true;
+    mesh(new THREE.CircleGeometry(R + 0.02, 96).rotateX(-Math.PI / 2), carbon, root, 0, F9.is, 0); // its top (hidden by the second stage)
+    // base: the heat shield with a boot round each engine, the Merlins hanging below it
+    mesh(new THREE.CylinderGeometry(R, R - 0.06, 0.5, 96), shield, root, 0, F9.base - 0.25, 0);
+    const em = engineMats("#3d3a37", "#2a2420", "#ffb066"), bg = bellGeo("merlin", 0.46, 0.22, F9.bell + 0.2);
+    for (const [x, z] of MERLIN9) {
+      bell(root, bg, em, x, 0, z, 0.46);
+      mesh(once("boot", () => new THREE.CylinderGeometry(0.3, 0.36, 0.22, 24)), shield, root, x, F9.base - 0.55, z);
+    }
+    // landing legs, folded flat against the thrust section and tanks; pivot at the bottom, foot pad at the top
+    const steel = std("#8f9297", { metalness: 0.8, roughness: 0.3 }), strutGeo = once("f9strut", () => new THREE.CylinderGeometry(0.075, 0.075, 1, 10).translate(0, 0.5, 0));
+    const legs = XANG.map((a) => {
+      const pv = skin(root, a, R - 0.02, 2.55);
+      mesh(once("f9leg", () => taper(0.92, 0.42, 0.5, 0.26, 9.7)), carbon, pv);
+      const pad = mesh(once("f9legPad", () => new THREE.CylinderGeometry(0.55, 0.62, 0.14, 24)), steel, pv, 0, 9.7, 0.32);
+      pad.rotation.x = -125 * D2R; // flat on the deck once the leg is down
+      // the telescoping pusher between the tank wall and the middle of the leg
+      return { pv, a, strut: mesh(strutGeo, steel, root) };
+    });
+    const lp = V3(), bp = V3(), up = V3(0, 1, 0);
+    const setLegs = (k) => legs.forEach(({ pv, a, strut }) => {
+      pv.rotation.x = k * 125 * D2R; pv.updateMatrix();
+      lp.set(0, 4.6, 0.2).applyMatrix4(pv.matrix); bp.set(Math.sin(a) * (R + 0.05), 9.4, Math.cos(a) * (R + 0.05));
+      strut.position.copy(bp); strut.scale.set(1, bp.distanceTo(lp), 1); strut.quaternion.setFromUnitVectors(up, lp.sub(bp).normalize());
+    });
+    setLegs(0);
+    // raceway and the flag, the NASA worm and SpaceX's wordmark
+    box(0.32, F9.tank - 4.6, 0.16, white, skin(root, -1.25, R, (F9.tank + 4.6) / 2), 0, 0, 0.05);
+    label(root, R + 0.012, 19, 30.5, 0, 1.45, (g, w, h) => spacex(g, w / 2, h / 2, w * 0.84));
+    label(root, R + 0.012, 9.2, 12.9, 0.12, 0.95, (g, w, h) => worm(g, w / 2, h / 2, w * 0.8, { vertical: true }), 96);
+    label(root, R + 0.012, 36.6, 37.78, 0, 2.2, flagArt, 96);
+    // grid fins at the top of the interstage (stowed: folded up flat; deployed: straight out, the flow through the cells)
+    const gm = std("#6d6a66", { metalness: 0.85, roughness: 0.42 }), fins = XANG.map((a) => {
+      const pv = skin(root, a, R + 0.12, F9.is - 1.75);
+      mesh(gridFinGeo("f9", 1.25, 1.5, 0.16, 0.13), gm, pv, 0, 0, 0.1);
+      box(0.5, 0.3, 0.3, carbon, skin(root, a, R, F9.is - 1.85), 0, 0, 0.12); // hinge actuator housing
+      return pv;
+    });
+    // cold-gas thruster pods between the fins
+    for (const a of [Math.PI / 2, -Math.PI / 2]) { const s = skin(root, a, R, F9.is - 0.55); box(0.55, 0.75, 0.32, carbon, s, 0, 0, 0.12); mesh(new THREE.CircleGeometry(0.09, 12), std("#050506"), s, 0, 0, 0.285); }
+    const ENG = MERLIN9;
+    const all9 = exhaust(root, { at: [0, 0, 0], re: 0.46, len: 60, kind: "kero", cluster: ENG, nozR: 0.46, glow: em.in });
+    const fire = exhaust(root, { at: [0, 0, 0], re: 0.46, len: 26, kind: "kero", glow: em.in });
+    return {
+      root, all9, fire, legFoot: 2.55 - 9.7 * Math.cos(55 * D2R) - 0.06,
+      legs: setLegs,
+      fins: (k) => fins.forEach((p) => (p.rotation.x = k * 90 * D2R)),
+    };
+  }
+  const MERLIN9 = [[0, 0], ...Array.from({ length: 8 }, (_, i) => [Math.sin((i * TAU) / 8 + Math.PI / 8) * 1.28, Math.cos((i * TAU) / 8 + Math.PI / 8) * 1.28])];
+
+  // Crew Dragon; root origin = the bottom of the heat shield. setNose(k): 0 closed .. 1 open; dracos(rate): thruster puffs
+  function crewDragon({ trunk = true } = {}) {
+    const root = new THREE.Group();
+    const skinT = ctex("dragonSkin", 1024, 512, (g, w, h) => { // white thermal protection with faint panel lines
+      g.fillStyle = "#f5f5f3"; g.fillRect(0, 0, w, h); const r = rng(31);
+      g.strokeStyle = "rgba(0,0,0,.07)"; g.lineWidth = 2;
+      for (let i = 0; i < 24; i++) { g.beginPath(); g.moveTo((i * w) / 24, h * 0.1); g.lineTo((i * w) / 24, h); g.stroke(); }
+      for (let i = 0; i < 300; i++) { g.fillStyle = `rgba(0,0,0,${0.015 * r()})`; g.fillRect(r() * w, r() * h, 4 + 30 * r(), 2 + 20 * r()); }
+    });
+    const white = std("#ffffff", { map: skinT, roughness: 0.38 }), dark = std("#1b1d20", { roughness: 0.45, metalness: 0.2 });
+    const pica = std("#2a2622", { roughness: 0.95, map: ctex("pica", 256, 256, (g, w, h) => { g.fillStyle = "#3a352f"; g.fillRect(0, 0, w, h); g.strokeStyle = "#221e1a"; g.lineWidth = 3; for (let i = 0; i <= 8; i++) { g.beginPath(); g.moveTo((i * w) / 8, 0); g.lineTo((i * w) / 8, h); g.moveTo(0, (i * h) / 8); g.lineTo(w, (i * h) / 8); g.stroke(); } }) });
+    // heat shield (PICA-X tiles), the capsule's lower band and its sidewall cone up to the nose cone's seat
+    lathe([[0.01, -0.12], [0.9, -0.1], [1.6, -0.04], [1.97, 0.04], [2.0, 0.12]], pica, root, 96);
+    const side = (y) => 2.0 - ((y - 0.42) * (2.0 - 1.04)) / (3.28 - 0.42); // sidewall radius at height y
+    lathe([[2.0, 0.12], [2.0, 0.42], [side(1.5), 1.5], [1.04, 3.28], [0.98, 3.3]], white, root, 128);
+    // SuperDraco pods: a raised fairing with two engine bells at its foot, four pods round the capsule
+    const podGeo = once("sdPod", () => taper(0.62, 0.16, 0.46, 0.1, 1.25));
+    for (const a of [Math.PI / 4, (3 * Math.PI) / 4, (5 * Math.PI) / 4, (7 * Math.PI) / 4]) {
+      const s = skin(root, a, side(0.5), 0.5); s.rotation.x = -16 * D2R; // lean with the sidewall
+      mesh(podGeo, white, s);
+      for (const dx of [-0.15, 0.15]) mesh(once("sdBell", () => new THREE.CylinderGeometry(0.06, 0.1, 0.16, 16, 1, true)), dark, s, dx, -0.04, 0.09);
+    }
+    // four windows and the hatch with its own window; Draco ports near the top
+    const glass = std("#05070a", { metalness: 0.9, roughness: 0.08 });
+    for (const a of [0.55, -0.55, Math.PI - 0.6, Math.PI + 0.6]) { const s = skin(root, a, side(2.55) + 0.01, 2.55); s.rotation.x = -16 * D2R; mesh(once("dWin", () => new THREE.CircleGeometry(0.17, 20)), glass, s); }
+    { const s = skin(root, 0, side(1.85) + 0.012, 1.85); s.rotation.x = -16 * D2R; mesh(new THREE.RingGeometry(0.44, 0.48, 4, 1, Math.PI / 4).scale(1, 1.5, 1), dark, s); mesh(new THREE.CircleGeometry(0.1, 16), glass, s, 0, 0.25, 0.002); }
+    for (const a of [0.3, 1.9, 3.5, 5.1]) { const s = skin(root, a, side(3.05) + 0.01, 3.05); s.rotation.x = -16 * D2R; for (const dx of [-0.07, 0.07]) mesh(once("draco", () => new THREE.CircleGeometry(0.04, 10)), std("#020203"), s, dx, 0, 0); }
+    decal(root, side(2.1) + 0.012, 1.7, 2.5, 1.35, 0.42, 160, 84, flagArt, side(1.7) + 0.012);
+    decal(root, side(2.95) + 0.012, 2.75, 3.15, -1.2, 0.7, 256, 64, (g, w, h) => spacex(g, w / 2, h / 2, h * 0.7, "#101214", false), side(2.75) + 0.012);
+    // docking adapter under the nose cone, and the cone on its forward hinge
+    cyl(0.62, 0.66, 3.3, 3.52, std("#a2a6ab", { metalness: 0.85, roughness: 0.3 }), root, 48);
+    mesh(new THREE.TorusGeometry(0.62, 0.05, 8, 48).rotateX(Math.PI / 2), std("#c9ccd0", { metalness: 0.8, roughness: 0.3 }), root, 0, 3.53, 0);
+    const hinge = new THREE.Group(); hinge.position.set(0, 3.32, 1.0); root.add(hinge);
+    const nose = lathe(Array.from({ length: 13 }, (_, i) => { const t = (i / 12) * (Math.PI / 2); return [1.0 * Math.cos(t) + 0.0, 1.08 * Math.sin(t)]; }), white, hinge, 96);
+    nose.position.z = -1.0;
+    const setNose = (k) => (hinge.rotation.x = k * 1.95);
+    const dracos = thrusters(root, [[[1.15, 3.0, 0], [1, 0.25, 0]], [[-1.15, 3.0, 0], [-1, 0.25, 0]], [[0, 3.0, 1.15], [0, 0.25, 1]], [[0, 3.0, -1.15], [0, 0.25, -1]], [[0.75, 3.35, 0.75], [0, 1, 0]], [[-0.75, 3.35, -0.75], [0, 1, 0]]]);
+    if (trunk) {
+      // unpressurised trunk: solar cells on one half, white radiator panels on the other, four fins at its foot
+      const tt = ctex("dTrunk", 1024, 512, (g, w, h) => {
+        g.fillStyle = "#eef0f1"; g.fillRect(0, 0, w, h);
+        g.strokeStyle = "rgba(0,0,0,.09)"; g.lineWidth = 2; for (let x = 0; x < w; x += w / 48) { g.beginPath(); g.moveTo(x, 0); g.lineTo(x, h); g.stroke(); }
+        const r = rng(5), x0 = w * 0.25, x1 = w * 0.75, nx = 30, ny = 12, cw = (x1 - x0) / nx, ch = (h * 0.86) / ny;
+        g.fillStyle = "#59606c"; g.fillRect(x0, h * 0.07, x1 - x0, h * 0.86);
+        for (let i = 0; i < nx; i++) for (let j = 0; j < ny; j++) { const k = 0.8 + 0.4 * r(); g.fillStyle = `rgb(${18 * k},${30 * k},${62 * k})`; g.fillRect(x0 + i * cw + 1, h * 0.07 + j * ch + 1, cw - 2, ch - 2); }
+      });
+      cyl(1.83, 1.83, -3.62, -0.02, std("#ffffff", { map: tt, roughness: 0.35, metalness: 0.1 }), root, 96, true);
+      cyl(1.86, 1.86, -3.7, -3.56, std("#b8bcc1", { metalness: 0.8, roughness: 0.35 }), root, 96);
+      const finShape = new THREE.Shape([new THREE.Vector2(0, 0), new THREE.Vector2(0.62, 0), new THREE.Vector2(0.62, 0.55), new THREE.Vector2(0, 1.55)]);
+      const fg = once("dFin", () => new THREE.ExtrudeGeometry(finShape, { depth: 0.07, bevelEnabled: false }).translate(0, 0, -0.035).rotateY(-Math.PI / 2));
+      for (const a of XANG) mesh(fg, white, skin(root, a, 1.82, -3.56));
+    }
+    return { root, setNose, dracos };
+  }
+
+  // the whole stack on the pad: booster feet... root origin = Merlin exit plane, 65.7 m to the top of Dragon's nose
+  function f9Stack() {
+    const root = new THREE.Group(), b = falcon9Booster(); root.add(b.root);
+    const R = F9.R, s2 = new THREE.Group(); root.add(s2);
+    const s2T = ctex("f9s2", 1024, 1024, (g, w, h) => { g.fillStyle = "#f2f3f4"; g.fillRect(0, 0, w, h); g.fillStyle = "rgba(60,64,70,.08)"; for (const f of [0.18, 0.42, 0.66]) g.fillRect(0, f * h, w, 3); });
+    cyl(R, R, F9.is, F9.s2, std("#ffffff", { map: s2T, roughness: 0.4 }), s2, 96, true);
+    cyl(R + 0.03, R + 0.03, F9.s2 - 0.22, F9.s2, std("#2b2d31", { roughness: 0.5, metalness: 0.4 }), s2, 96);
+    label(s2, R + 0.012, 49.8, 56.6, 0, 1.15, (g, w, h) => spacex(g, w / 2, h / 2, w * 0.84));
+    // Merlin Vacuum: the niobium nozzle extension glows red-hot while it fires; hidden in the interstage until staging
+    const mv = std("#4a4643", { metalness: 0.7, roughness: 0.5, emissive: new THREE.Color("#ff4a12"), emissiveIntensity: 0, side: THREE.DoubleSide });
+    mesh(bellGeo("mvac", 1.6, 0.44, 3.95, 0.7, 64), mv, s2, 0, F9.mvExit, 0);
+    cyl(0.44, 0.5, F9.mvExit + 3.95, F9.is + 0.2, std("#3a3836", { metalness: 0.7, roughness: 0.4 }), s2, 32);
+    const mvacFire = exhaust(s2, { at: [0, F9.mvExit, 0], re: 1.6, len: 80, kind: "kero" });
+    const mvac = (p) => { mvacFire(p, 1); mv.emissiveIntensity = p * 1.8; };
+    const d = crewDragon(); d.root.position.y = F9.s2 + 3.62; root.add(d.root);
+    return { root, len: 65.7, parts: { booster: b.root, s2, dragon: d.root }, fires: { m1d: b.all9, mvac }, dragon: d, legs: b.legs, booster: b };
+  }
+
+  // ---------------------------------------------------------------- Starship (Block 2): Super Heavy and the Ship
+  // metres from the booster's outer Raptor exits (the top of the launch mount): engine bay to 6.2, LOX tank to 42,
+  // methane tank to 64, forward dome to 68.2, vented hot-staging ring to 71.2. The ship from there: skirt to 79, LOX to
+  // 92.5, methane to 105, payload bay to 114, nose to 123.2. 9 m across.
+  const SS = { R: 4.5, aft: 6.2, lox: 42, ch: 64, hsr: 68.2, top: 71.2, sLox: 7.8, sLoxTop: 21.3, sCh: 33.8, bay: 42.8, sTop: 52 }; // ship heights from its own base
+  // booster engines: 3 in the middle and 10 round them gimbal and relight to come home; 20 fixed on the rim
+  const RAPTORS = [[3, 0.9, 0.5], [10, 2.4, 0.1], [20, 3.8, 0]].flatMap(([n, r, ph], k) => Array.from({ length: n }, (_, i) => [Math.sin((i * TAU) / n + ph) * r, Math.cos((i * TAU) / n + ph) * r, k]));
+  // stainless steel: rings 1.83 m tall of 4 sheets each, staggered vertical welds, a slightly different tone sheet to
+  // sheet. frost [[y0, y1, strength]] lays matte white frost over the cold tanks; soot darkens a returning booster.
+  // Returns { map, orm } for the hull between y0 and y1 (orm: roughness in G, metalness in B).
+  function steelSkin(key, y0, y1, { frost = [], soot = 0, heat = 0, seed = 3 } = {}) {
+    return once("steel:" + key, () => {
+      const W = 1024, H = 2048, Y = (y) => (1 - (y - y0) / (y1 - y0)) * H, r = rng(seed);
+      const a = document.createElement("canvas"), o = document.createElement("canvas"); a.width = o.width = W; a.height = o.height = H;
+      const g = a.getContext("2d"), q = o.getContext("2d");
+      const both = (ca, co, f) => { g.fillStyle = ca; f(g); q.fillStyle = co; f(q); };
+      both("#c3c7cb", "rgb(0,78,255)", (c) => c.fillRect(0, 0, W, H));
+      for (let yy = y0, i = 0; yy < y1; yy += 1.83, i++) {
+        const off = r(), ya = Y(Math.min(y1, yy + 1.83)), yb = Y(yy);
+        for (let j = 0; j < 4; j++) {
+          const x0 = ((j + off) / 4) * W, t = 188 + 14 * r(), rough = 64 + 30 * r();
+          both(`rgb(${t},${t + 4},${t + 8})`, `rgb(0,${rough},255)`, (c) => { c.fillRect(x0, ya, W / 4, yb - ya); c.fillRect(x0 - W, ya, W / 4, yb - ya); });
+          both("rgba(96,86,74,.55)", "rgb(0,120,200)", (c) => c.fillRect(x0 - 1, ya, 2.5, yb - ya)); // vertical weld
+        }
+        both("rgba(96,86,74,.6)", "rgb(0,130,190)", (c) => c.fillRect(0, yb - 1.5, W, 3)); // ring weld
+      }
+      if (heat) { const gr = g.createLinearGradient(0, Y(y0 + heat), 0, Y(y0)); gr.addColorStop(0, "rgba(120,96,70,0)"); gr.addColorStop(0.6, "rgba(126,94,62,.5)"); gr.addColorStop(1, "rgba(70,74,96,.75)"); g.fillStyle = gr; g.fillRect(0, Y(y0 + heat), W, H - Y(y0 + heat)); }
+      for (const [fa, fb, k] of frost) { // frost: soft matte white over the cold tank, thinner at the welds, with drips
+        const top = Y(fb), bot = Y(fa), fr = rng(Math.round(fa * 7 + fb));
+        const fade = (c, rgb, a) => { const gr = c.createLinearGradient(0, top - 40, 0, top + 30); gr.addColorStop(0, `rgba(${rgb},0)`); gr.addColorStop(1, `rgba(${rgb},${a})`); c.fillStyle = gr; c.fillRect(0, top - 40, W, 70); c.fillStyle = `rgba(${rgb},${a})`; c.fillRect(0, top + 30, W, bot - top - 30); };
+        fade(g, "232,236,240", 0.8 * k); fade(q, "0,215,30", 0.85 * k);
+        for (let i = 0; i < 900; i++) { // patches thicker and thinner
+          const x = fr() * W, yy = top + (bot - top) * fr(), rad = 6 + 40 * fr(), rgb = fr() < 0.5 ? "250,251,252" : "176,182,188", a = (0.3 + 0.1 * fr()) * k;
+          const gr = g.createRadialGradient(x, yy, 0, x, yy, rad); gr.addColorStop(0, `rgba(${rgb},${a})`); gr.addColorStop(1, `rgba(${rgb},0)`); g.fillStyle = gr; g.fillRect(x - rad, yy - rad, rad * 2, rad * 2);
+        }
+        for (let yy = fa; yy < fb; yy += 1.83) { const y = Y(yy); both(`rgba(170,176,183,${0.55 * k})`, "rgba(0,110,220,.5)", (c) => c.fillRect(0, y - 3, W, 6)); }
+        for (let i = 0; i < 120; i++) { // drips: condensation running down, steel showing through
+          const x = fr() * W, yy = top + (bot - top) * fr(), hh = Math.min(40 + 260 * fr(), bot - yy), w = 2 + 5 * fr(), gr = g.createLinearGradient(0, yy, 0, yy + hh);
+          gr.addColorStop(0, "rgba(176,182,189,0)"); gr.addColorStop(0.3, `rgba(176,182,189,${0.6 * k})`); gr.addColorStop(1, "rgba(176,182,189,0)");
+          g.fillStyle = gr; g.fillRect(x, yy, w, hh); q.fillStyle = "rgba(0,110,220,.35)"; q.fillRect(x, yy, w, hh);
+        }
+      }
+      if (soot) { // a flown booster: soot streaks from the top and the engine bay
+        for (let i = 0; i < 300; i++) {
+          const x = r() * W, fromTop = r() < 0.6, len = (fromTop ? 0.12 : 0.06) * H * (0.3 + r()), y = fromTop ? 0 : H - len;
+          const gr = g.createLinearGradient(0, y, 0, y + len), al = soot * (0.08 + 0.3 * r() * r());
+          gr.addColorStop(fromTop ? 0 : 1, `rgba(32,28,24,${al})`); gr.addColorStop(fromTop ? 1 : 0, "rgba(32,28,24,0)");
+          g.fillStyle = gr; g.fillRect(x, y, 3 + 14 * r(), len);
+        }
+      }
+      const map = new THREE.CanvasTexture(a), orm = new THREE.CanvasTexture(o);
+      map.colorSpace = THREE.SRGBColorSpace; orm.colorSpace = NS; map.anisotropy = orm.anisotropy = 8;
+      return { map, orm };
+    });
+  }
+  const steelMat = (sk, o = {}) => std("#ffffff", { map: sk.map, roughnessMap: sk.orm, metalnessMap: sk.orm, roughness: 1, metalness: 1, ...o });
+  // the ship's heat shield: black hexagonal tiles (about 31 cm) with dark gaps; tileable, with a matching normal map
+  const tileArt = (g, w, h, height) => {
+    const s = 32, dy = 28, r = rng(12);
+    g.fillStyle = height ? "#000" : "#0b0b0c"; g.fillRect(0, 0, w, h);
+    for (let row = -1; row <= h / dy + 1; row++) for (let col = -1; col <= w / s + 1; col++) {
+      const cx = col * s + (row % 2 ? s / 2 : 0), cy = row * dy, t = height ? 200 : 26 + 16 * r() + (r() < 0.012 ? 70 : 0);
+      g.fillStyle = height ? "#c8c8c8" : `rgb(${t},${t},${t + 2})`;
+      g.beginPath(); for (let k = 0; k < 6; k++) { const an = (k / 6) * TAU + Math.PI / 6; g.lineTo(cx + Math.cos(an) * s * 0.55, cy + Math.sin(an) * s * 0.55); } g.fill();
+    }
+  };
+  const tileMat = (rx, ry) => {
+    const map = ctex("tiles", 512, 504, (g, w, h) => tileArt(g, w, h, false), { repeat: [1, 1] }), nm = normal("tilesN", 512, 504, (g, w, h) => tileArt(g, w, h, true), 1.2, [1, 1]);
+    const m = std("#ffffff", { map: map.clone(), normalMap: nm.clone(), roughness: 0.72, metalness: 0.05 });
+    for (const t of [m.map, m.normalMap]) { t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(rx, ry); t.needsUpdate = true; }
+    return m;
+  };
+  // a grid fin: a rectangular frame W x H with a lattice of square cells, lying in the x-y plane, the hinge edge on y = 0
+  function boxGridGeo(key, W, Hh, T, nx, ny) {
+    return once("bgrid:" + key, () => {
+      const parts = [], add = (g, x, y) => { const q = g.toNonIndexed(); q.translate(x, y, 0); delete q.attributes.uv; parts.push(q); };
+      const t = 0.12;
+      add(new THREE.BoxGeometry(W, t, T), 0, t / 2); add(new THREE.BoxGeometry(W, t, T), 0, Hh - t / 2);
+      for (let i = 0; i <= nx; i++) add(new THREE.BoxGeometry(i % nx === 0 ? t : 0.05, Hh, T), -W / 2 + (i * W) / nx, Hh / 2);
+      for (let j = 1; j < ny; j++) add(new THREE.BoxGeometry(W, 0.05, T), 0, (j * Hh) / ny);
+      return X.mergeGeometries(parts);
+    });
+  }
+  function raptorField(parent, list, em, y0) { // the bells of an engine cluster, merged per size
+    const big = bellGeo("raptor", 0.65, 0.31, 1.75, 0.8, 32), out = batch(em.out, parent), inn = batch(em.in, parent);
+    for (const [x, z, k] of list) { const y = y0 + (k < 2 ? 0.3 : 0); out.add(big, x, y, z); inn.add(big, x, y, z); }
+    out.done(); inn.done().castShadow = false;
+  }
+  // Super Heavy; root origin = the outer Raptors' exits. fire33 / fire13 / fire3: the whole cluster, the inner engines,
+  // the centre three. frost: fuelled on the pad; flown: soot from a previous flight's entry
+  function superHeavy({ frost = true, flown = false } = {}) {
+    const root = new THREE.Group(), R = SS.R;
+    const sk = steelSkin("sh" + (frost ? "F" : "") + (flown ? "S" : ""), 1.9, SS.hsr, { frost: frost ? [[7.6, 40.4, 1], [44.5, 62.2, 0.85]] : [], soot: flown ? 1 : 0, heat: 4, seed: 7 });
+    const steel = steelMat(sk), plain = std("#c4c8cc", { metalness: 1, roughness: 0.34 }), dark = std("#2a2c30", { metalness: 0.5, roughness: 0.55 });
+    cyl(R, R, 1.9, SS.hsr, steel, root, 128, true);
+    // engine bay: the base heat shield, the 33 bells below it, stiffener panels and the quick-disconnect plate
+    mesh(new THREE.CylinderGeometry(R, R - 0.1, 0.45, 128), std("#2b2724", { roughness: 0.9 }), root, 0, 1.7, 0);
+    const em = engineMats("#45484d", "#2c2a2a", "#ffb7a8");
+    raptorField(root, RAPTORS, em, 0);
+    const pan = batch(plain, root);
+    for (let i = 0; i < 24; i++) { const a = (i / 24) * TAU + 0.13; pan.add(new THREE.BoxGeometry(0.42, 3.6, 0.14), Math.sin(a) * (R + 0.05), 4.0, Math.cos(a) * (R + 0.05), 0, a, 0); }
+    pan.done();
+    box(1.6, 2.2, 0.3, dark, skin(root, 2.2, R, 3.6), 0, 0, 0.12);
+    // raceways up the side, chopstick catch pins, three big steel grid fins and the vented hot-staging ring
+    for (const [a, w] of [[-0.55, 0.62], [Math.PI - 0.55, 0.4]]) box(w, SS.hsr - 7.8, 0.32, plain, skin(root, a, R, (SS.hsr + 7.8) / 2), 0, 0, 0.12);
+    for (const s of [-1, 1]) box(1.5, 0.9, 1.4, dark, root, s * (R + 0.55), 65.6, 0); // the chopsticks catch it by these
+    const gf = std("#7d8187", { metalness: 0.85, roughness: 0.38 });
+    for (const a of [0.6, 0.6 + TAU / 3, 0.6 + (2 * TAU) / 3]) {
+      const s = skin(root, a, R, 66.7);
+      const fin = mesh(boxGridGeo("sh", 2.9, 3.3, 0.55, 6, 7), gf, s, 0, 0, 0.35); fin.rotation.x = Math.PI / 2; // straight out, cells along the flow
+      box(1.2, 0.9, 0.5, dark, s, 0, 0.1, 0.18);
+    }
+    const ring = cyl(R + 0.03, R + 0.03, SS.hsr, SS.top, std("#ffffff", { map: ctex("hsr", 2048, 128, (g, w, h) => {
+      g.fillStyle = "#b9bdc2"; g.fillRect(0, 0, w, h);
+      for (let i = 0; i < 28; i++) { const x = ((i + 0.5) / 28) * w; g.fillStyle = "#050506"; g.beginPath(); g.roundRect(x - w / 28 * 0.3, h * 0.14, (w / 28) * 0.6, h * 0.72, 10); g.fill(); g.fillStyle = "rgba(255,255,255,.12)"; g.fillRect(x - w / 28 * 0.3, h * 0.14, (w / 28) * 0.6, 3); }
+      g.fillStyle = "rgba(60,50,40,.5)"; g.fillRect(0, 0, w, 4); g.fillRect(0, h - 4, w, 4);
+    }), metalness: 0.9, roughness: 0.35 }), root, 128, true);
+    ring.castShadow = true;
+    mesh(new THREE.CircleGeometry(R, 64).rotateX(-Math.PI / 2), dark, root, 0, SS.top - 0.6, 0); // the forward dome's shield, seen through the vents
+    // exhaust: one volume per set of engines that fire together
+    const cl = (k) => RAPTORS.filter((e) => e[2] <= k).map(([x, z]) => [x, z]);
+    const f33 = exhaust(root, { re: 0.65, len: 120, kind: "methalox", cluster: cl(2), nozR: 0.65 });
+    const f13 = exhaust(root, { at: [0, 0.3, 0], re: 0.65, len: 70, kind: "methalox", cluster: cl(1), nozR: 0.65 });
+    const f3 = exhaust(root, { at: [0, 0.3, 0], re: 0.65, len: 40, kind: "methalox", cluster: cl(0), nozR: 0.65 });
+    const pw = [0, 0, 0], glow = () => (em.in.emissiveIntensity = Math.max(...pw) * 2.4);
+    return {
+      root,
+      fire33: (p, th = 0) => { pw[0] = p; f33(p, th); glow(); },
+      fire13: (p, th = 0) => { pw[1] = p; f13(p, th); glow(); },
+      fire3: (p, th = 0) => { pw[2] = p; f3(p, th); glow(); },
+    };
+  }
+
+  // the Ship; root origin = the base of its skirt, `body` holds everything (scenes move it to pivot on the centre of
+  // mass). The heat-shield tiles face local +x (the belly), the payload door is on -x. fireRSL / fireRVac: the three
+  // sea-level Raptors in the middle and the three vacuum Raptors round them. flaps(k, c): flap deflection
+  function starshipShip({ frost = false } = {}) {
+    const root = new THREE.Group(), body = new THREE.Group(); root.add(body);
+    const R = SS.R, sk = steelSkin("ship" + (frost ? "F" : ""), 0, SS.bay, { frost: frost ? [[8.4, 20.4, 0.9], [22.6, 32.4, 0.75]] : [], heat: 2, seed: 19 });
+    const steel = steelMat(sk), dark = std("#1d1e21", { metalness: 0.3, roughness: 0.6 });
+    const NOSE = (y) => R * Math.pow(Math.max(0, 1 - ((y - SS.bay) / (SS.sTop - SS.bay)) ** 2), 0.62);
+    const noseProf = Array.from({ length: 29 }, (_, i) => { const y = SS.bay + ((SS.sTop - SS.bay) * i) / 28; return [NOSE(y), y]; });
+    const hull = [cyl(R, R, 0, SS.bay, steel, body, 128, true), lathe(noseProf, std("#ffffff", { map: steelSkin("shipNose", SS.bay, SS.sTop, { seed: 23 }).map, metalness: 0.95, roughness: 0.32 }), body, 128)];
+    // heat shield: tiles over the windward half (+x), from the skirt up over the nose
+    const tSide = Math.PI / 2, half = Math.PI * 1.06;
+    mesh(new THREE.CylinderGeometry(R + 0.03, R + 0.03, SS.bay - 0.6, 96, 1, true, tSide - half / 2, half), tileMat(3, 9), body, 0, (SS.bay + 0.6) / 2, 0);
+    mesh(new THREE.LatheGeometry(noseProf.slice(0, 26).map(([r, y]) => new THREE.Vector2(r + 0.03, y)), 96, tSide - half / 2, half), tileMat(3, 2.2), body);
+    // engines: three vacuum Raptors (2.3 m nozzles) and three sea-level ones in the middle, under a dark aft shield
+    mesh(new THREE.CylinderGeometry(R - 0.05, R - 0.05, 0.3, 96), std("#2b2724", { roughness: 0.9 }), body, 0, 1.6, 0);
+    const em = engineMats("#45484d", "#2c2a2a", "#ffb7a8"), rv = bellGeo("rvac", 1.15, 0.36, 3.4, 0.75, 48), rs = bellGeo("raptor", 0.65, 0.31, 1.75, 0.8, 32);
+    const RV = [0, 1, 2].map((i) => [Math.sin(0.4 + (i * TAU) / 3) * 2.8, Math.cos(0.4 + (i * TAU) / 3) * 2.8]), RS = [0, 1, 2].map((i) => [Math.sin(0.4 + Math.PI + (i * TAU) / 3) * 0.95, Math.cos(0.4 + Math.PI + (i * TAU) / 3) * 0.95]);
+    for (const [x, z] of RV) bell(body, rv, em, x, -0.2, z, 1.15);
+    for (const [x, z] of RS) bell(body, rs, em, x, 1.2, z, 0.65);
+    // aft flaps on the edges of the tiled side, smaller forward flaps up on the nose, leaning back with it
+    const flaps = []; // [deflection group, side]
+    const flapGeo = (span, h, lean) => { const s = new THREE.Shape([new THREE.Vector2(0, 0), new THREE.Vector2(span, 1.0), new THREE.Vector2(span - lean * 0.4, h - 1.0), new THREE.Vector2(-lean, h)]); return new THREE.ExtrudeGeometry(s, { depth: 0.46, bevelEnabled: true, bevelSize: 0.06, bevelThickness: 0.06, bevelSegments: 1 }).translate(0, 0, -0.23).rotateY(-Math.PI / 2); };
+    const flapM = tileMat(0.6, 1.2);
+    for (const s of [-1, 1]) {
+      const a = tSide + s * (Math.PI / 2 + 0.05);
+      const pa = new THREE.Group(); skin(body, a, R - 0.1, 0.8).add(pa); mesh(once("aftFlap", () => flapGeo(3.4, 11, 0)), flapM, pa); flaps.push([pa, s]);
+      const yb = SS.bay + 0.6, pf = new THREE.Group(), fs = skin(body, tSide + s * (Math.PI / 2 + 0.38), NOSE(yb) - 0.1, yb); fs.rotation.x = -0.18; fs.add(pf);
+      mesh(once("fwdFlap", () => flapGeo(1.9, 6.4, 1.6)), flapM, pf); flaps.push([pf, s]);
+      box(0.9, 0.6, 1.0, dark, skin(body, tSide + s * (Math.PI / 2 - 0.25), R, 41.6), 0, 0, 0.4); // catch pin
+    }
+    // payload door (Pez dispenser slot) and the leeward raceway
+    const door = box(4.2, 2.4, 0.2, std("#060607", { roughness: 0.9 }), skin(body, -Math.PI / 2, R, 37.6), 0, 0, 0.0);
+    box(0.5, 28, 0.28, steel, skin(body, -Math.PI / 2 + 0.55, R, 23), 0, 0, 0.1);
+    const fireRSL = exhaust(body, { at: [0, 1.2, 0], re: 0.65, len: 60, kind: "methalox", cluster: RS, nozR: 0.65, glow: em.in });
+    const fireRVac = exhaust(body, { at: [0, -0.2, 0], re: 1.15, len: 70, kind: "methalox", cluster: RV, nozR: 1.15 });
+    return {
+      root, body, hull, door, fireRSL, fireRVac, fires: [fireRSL],
+      flaps: (k, c) => flaps.forEach(([pv, s], i) => (pv.rotation.y = s * (k + 0.06 * Math.sin(c * 2 + i)))),
+    };
+  }
+  // the full stack on the launch mount: root origin = booster engine exits; the ship sits on the hot-staging ring
+  function starshipStack() {
+    const root = new THREE.Group(), sh = superHeavy({ frost: true }), ship = starshipShip({ frost: true });
+    root.add(sh.root, ship.root); ship.root.position.y = SS.top; ship.root.rotation.y = 0.54; // tiles to one side of the usual view
+    // hot staging: the ship lights up while still sitting on the booster; its exhaust hits the booster's forward dome and
+    // blasts out sideways through the vents in the ring. Until the booster has fallen away the ship's plumes stop at it.
+    const vents = Array.from({ length: 8 }, (_, i) => { const a = (i / 8) * TAU + 0.2; return exhaust(sh.root, { at: [Math.sin(a) * (SS.R + 0.1), SS.hsr + 1.5, Math.cos(a) * (SS.R + 0.1)], re: 0.6, len: 18, kind: "methalox", dir: [Math.sin(a), -0.3, Math.cos(a)] }); });
+    const room = (exitY) => (sh.root.visible ? exitY + ship.root.position.y - sh.root.position.y - SS.top : Infinity); // clear air under an exit
+    return {
+      root, len: SS.top + SS.sTop, parts: { booster: sh.root, ship: ship.root }, ship, sh,
+      fires: {
+        booster: (p, th) => sh.fire33(p, th), ship: (p, th) => ship.fireRSL(p, th, room(1.2)), rvac: (p, th) => ship.fireRVac(p, th, room(-0.2)),
+        hsr: (p, th) => vents.forEach((f) => f(p, th)),
+      },
+    };
+  }
+
+  // ---------------------------------------------------------------- Apollo command and service module
+  // root origin = the base of the command module's heat shield. top = the docking probe's tip
+  function apolloCM({ probe = false, burnt = false } = {}) {
+    const root = new THREE.Group();
+    // the ablator is wrapped in aluminised Kapton tape: a shiny, crinkled silver until entry scorches it brown
+    const mylar = burnt ? std("#5b4b3d", { roughness: 0.85, metalness: 0.2 }) : std("#dfe2e6", { metalness: 0.95, roughness: 0.22, bumpMap: ctex("kapton", 256, 256, (g, w, h) => { g.fillStyle = "#808080"; g.fillRect(0, 0, w, h); const r = rng(41); for (let i = 0; i < 500; i++) { const c = 100 + 60 * r(); g.fillStyle = `rgb(${c},${c},${c})`; g.fillRect(r() * w, r() * h, 2 + 30 * r(), 1 + 3 * r()); } }, { srgb: false, repeat: [3, 2] }), bumpScale: 0.6 });
+    lathe([[0.01, -0.28], [0.9, -0.24], [1.6, -0.14], [1.93, -0.04], [1.956, 0.06]], std("#4a3a2c", { roughness: 0.95 }), root, 96);
+    const side = (y) => 1.956 - ((y - 0.16) * (1.956 - 0.42)) / (2.95 - 0.16);
+    lathe([[1.956, 0.06], [1.94, 0.16], [0.46, 2.92], [0.42, 3.0], [0.42, 3.2], [0.01, 3.23]], mylar, root, 96);
+    const glass = std("#05070a", { metalness: 0.9, roughness: 0.08 });
+    for (const a of [-0.35, 0.35]) { const s = skin(root, a, side(2.15), 2.15); s.rotation.x = -29 * D2R; mesh(once("cmRvWin", () => new THREE.PlaneGeometry(0.22, 0.3)), glass, s, 0, 0, 0.012); }
+    for (const a of [-1.2, 1.2, 0]) { const s = skin(root, a, side(1.35), 1.35); s.rotation.x = -29 * D2R; mesh(once("cmWin", () => new THREE.CircleGeometry(0.15, 20)), glass, s, 0, 0, 0.012); }
+    for (const a of [0.8, 2.4, 3.9, 5.5]) { const s = skin(root, a, side(2.5), 2.5); s.rotation.x = -29 * D2R; for (const d of [-0.08, 0.08]) mesh(once("cmRcs", () => new THREE.CircleGeometry(0.035, 10)), std("#020203"), s, d, 0, 0.01); }
+    if (probe) { rod([0, 3.2, 0], [0, 3.95, 0], 0.05, std("#c3c7cb", { metalness: 0.85, roughness: 0.3 }), root); mesh(new THREE.ConeGeometry(0.09, 0.2, 12), std("#8c9095", { metalness: 0.8, roughness: 0.3 }), root, 0, 4.05, 0); }
+    return { root, top: probe ? 4.15 : 3.23, R: 1.956 };
+  }
+  // the CSM: service module below the CM (to -4.4) with the SPS bell hanging to -7.4; fire = the SPS
+  function apolloCSM() {
+    const root = new THREE.Group(), cm = apolloCM({ probe: true }); root.add(cm.root);
+    const smT = ctex("apolloSM", 1024, 512, (g, w, h) => { // aluminium panels, white radiator stripes, the stencilled name
+      g.fillStyle = "#cfd2d5"; g.fillRect(0, 0, w, h);
+      for (let i = 0; i < 6; i++) { g.fillStyle = `rgb(${196 + 10 * (i % 2)},${199 + 10 * (i % 2)},${203 + 10 * (i % 2)})`; g.fillRect((i * w) / 6, 0, w / 6, h); g.fillStyle = "rgba(0,0,0,.25)"; g.fillRect((i * w) / 6, 0, 2, h); }
+      g.fillStyle = "#f4f4f2"; for (const x of [0.06, 0.4, 0.56, 0.9]) g.fillRect(x * w, h * 0.12, w * 0.05, h * 0.62);
+      g.fillStyle = "#16171a"; g.font = "bold 40px Helvetica,Arial,sans-serif"; g.textAlign = "center"; g.fillText("UNITED STATES", w * 0.25, h * 0.2);
+      g.fillStyle = "rgba(0,0,0,.2)"; g.fillRect(0, h * 0.04, w, 3); g.fillRect(0, h * 0.95, w, 3);
+    });
+    cyl(1.956, 1.956, -4.4, -0.02, std("#ffffff", { map: smT, metalness: 0.75, roughness: 0.32 }), root, 96, true);
+    lathe([[1.956, -4.4], [1.75, -4.55], [0.62, -4.6]], std("#bfc2c6", { metalness: 0.75, roughness: 0.35 }), root, 64); // aft bulkhead
+    // SPS engine: a dark bell, 2.5 m across
+    const em = engineMats("#4c4e52", "#2a2826", "#ffcc99");
+    bell(root, bellGeo("sps", 1.25, 0.5, 2.9, 0.7, 48), em, 0, -7.4, 0, 1.25);
+    // RCS quads, the S-band high-gain antenna on its boom (folded at the aft end)
+    const quad = std("#e3e4e2", { roughness: 0.5 });
+    for (const a of [Math.PI / 4, (3 * Math.PI) / 4, (5 * Math.PI) / 4, (7 * Math.PI) / 4]) { const s = skin(root, a, 1.956, -0.9); box(0.3, 0.75, 0.32, quad, s, 0, 0, 0.12); for (const [x, y] of [[0, 0.42], [0, -0.42], [0.2, 0], [-0.2, 0]]) mesh(once("rcsN", () => new THREE.CylinderGeometry(0.035, 0.06, 0.12, 8)), std("#3a3b3e", { metalness: 0.7 }), s, x, y, 0.2); }
+    rod([1.3, -4.3, 1.3], [2.25, -5.2, 2.25], 0.05, std("#cfcfcf"), root);
+    for (const [x, z] of [[2.25, 2.0], [2.55, 2.3], [2.0, 2.55], [2.3, 2.6]]) mesh(once("hga", () => new THREE.SphereGeometry(0.3, 16, 8, 0, TAU, 0, 1.1)), std("#ececea", { side: THREE.DoubleSide }), root, x, -5.3, z);
+    const rcs = thrusters(root, [0, 1, 2, 3].map((i) => { const a = Math.PI / 4 + (i * Math.PI) / 2; return [[Math.sin(a) * 2.25, -0.9, Math.cos(a) * 2.25], [Math.sin(a + 1.5), 0, Math.cos(a + 1.5)]]; }), 1.3);
+    const fire = exhaust(root, { at: [0, -7.4, 0], re: 1.25, len: 22, kind: "hyper", glow: em.in });
+    return { root, top: cm.top, rcs, fire };
+  }
+
+  // ---------------------------------------------------------------- Saturn V (Apollo 11, AS-506)
+  // metres from the F-1 exits: base heat shield to 5.8, S-IC to 41 (thrust section, RP-1 tank, corrugated intertank,
+  // LOX tank, forward skirt), S-II interstage ring to 46.5, S-II to 66, the S-IVB's aft interstage cone to 71.5, S-IVB
+  // to 85.2, instrument unit to 86.1, the lunar module adapter to 94.6, service module to 99, command module under its
+  // boost cover to 102.5, escape tower to 106.8, escape motor to 110, nose 111.2. 10.1 m across.
+  const SV = { R1: 5.05, R3: 3.3, base: 5.8, fuel: 20.5, it: 23.8, lox: 38, sic: 41, is: 46.5, s2: 66, ais: 71.5, s4: 85.2, iu: 86.1, sla: 94.6, cm: 99, bpc: 102.5, tower: 106.8, motor: 110, tip: 111.2 };
+  const SVF = 0.47; // the side the launch cameras look at (the anatomy figure's front)
+  // paint between angles a0..a1 (round the body) and heights y0..y1 on a texture covering Y0..Y1
+  const span = (g, w, h, Y0, Y1, a0, a1, y0, y1) => { const Y = (y) => (1 - (y - Y0) / (Y1 - Y0)) * h; for (const k of [-1, 0, 1]) g.fillRect((a0 / TAU + k) * w, Y(y1), ((a1 - a0) / TAU) * w, Y(y0) - Y(y1)); };
+  function saturnV() {
+    const root = new THREE.Group(), R1 = SV.R1, R3 = SV.R3, Q = [0, 1, 2, 3].map((i) => SVF + Math.PI / 4 + (i * Math.PI) / 2);
+    const paint = "#f1f0eb", black = std("#151618", { roughness: 0.55 }), white = std(paint, { roughness: 0.5 });
+    const s1 = new THREE.Group(), inter = new THREE.Group(), s2 = new THREE.Group(), s4b = new THREE.Group(), les = new THREE.Group();
+    root.add(s1, inter, s2, s4b, les);
+    // S-IC: the roll pattern, panel seams; the intertank is its own corrugated band
+    const sic = ctex("svSIC", 1024, 2048, (g, w, h) => {
+      const Y = (y) => (1 - (y - SV.base) / (SV.sic - SV.base)) * h;
+      g.fillStyle = paint; g.fillRect(0, 0, w, h);
+      g.fillStyle = "#151618"; for (const a of [SVF, SVF + Math.PI]) span(g, w, h, SV.base, SV.sic, a, a + Math.PI / 2, SV.base, 17.5);
+      g.fillStyle = "rgba(0,0,0,.14)"; for (const y of [9.2, 12, 15, 17.8, 27, 30, 33, 35.6]) g.fillRect(0, Y(y) - 1, w, 2);
+      g.fillStyle = "rgba(0,0,0,.3)"; for (const y of [SV.fuel, SV.lox]) g.fillRect(0, Y(y) - 2, w, 4);
+      g.fillStyle = "#1a1b1d"; for (let i = 0; i < 24; i++) { const a = SVF - 1.2 + i * 0.27; span(g, w, h, SV.base, SV.sic, a, a + 0.05, 39.4, 40.2); } // forward skirt vents
+    });
+    cyl(R1, R1, SV.base, SV.sic, std("#ffffff", { map: sic, roughness: 0.5 }), s1, 128, true);
+    const itT = ctex("svIT", 1024, 128, (g, w, h) => { g.fillStyle = paint; g.fillRect(0, 0, w, h); g.fillStyle = "#151618"; for (let i = 0; i < 8; i += 2) span(g, w, h, 0, 1, SVF + (i * Math.PI) / 4 + 0.2, SVF + ((i + 1) * Math.PI) / 4 + 0.2, 0, 1); });
+    cyl(R1 + 0.04, R1 + 0.04, SV.fuel, SV.it, std("#ffffff", { map: itT, roughness: 0.55, normalMap: normal("svITN", 1024, 32, (g, w, h) => { for (let x = 0; x < w; x++) { const v = 128 + 120 * Math.sin((x / w) * TAU * 120); g.fillStyle = `rgb(${v},${v},${v})`; g.fillRect(x, 0, 1, h); } }, 3) }), s1, 128, true);
+    label(s1, R1 + 0.02, 34.6, 35.8, SVF - 0.18, 2.2, flagArt, 80);
+    label(s1, R1 + 0.02, 28.0, 32.95, SVF - 0.18, 1.6, vtext("USA", "#151618"), 60);
+    // base: thrust structure and heat shield, the five F-1s (dark film-cooled nozzle extensions), engine fairings, fins
+    lathe([[R1 - 0.7, 5.36], [R1 - 0.12, 5.6], [R1, SV.base]], std("#2c2b29", { roughness: 0.85 }), s1, 96);
+    mesh(new THREE.CircleGeometry(R1 - 0.6, 64).rotateX(Math.PI / 2), std("#3a3836", { roughness: 0.9 }), s1, 0, 5.36, 0);
+    const f1T = ctex("f1", 512, 256, (g, w, h) => { g.fillStyle = "#4a4541"; g.fillRect(0, 0, w, h); for (let x = 0; x < w; x += 3) { g.fillStyle = `rgba(0,0,0,${0.25 + 0.2 * Math.sin(x)})`; g.fillRect(x, 0, 1.4, h * 0.56); } g.fillStyle = "#121212"; g.fillRect(0, h * 0.56, w, h * 0.44); }, { srgb: true });
+    const f1m = { out: std("#ffffff", { map: f1T, metalness: 0.55, roughness: 0.55 }), in: std("#2a2420", { metalness: 0.4, roughness: 0.7, side: THREE.BackSide, emissive: new THREE.Color("#ffb070"), emissiveIntensity: 0 }) };
+    const F1 = [[0, 0], ...Q.map((a) => [Math.sin(a) * 3.2, Math.cos(a) * 3.2])];
+    for (const [x, z] of F1) { bell(s1, bellGeo("f1", 1.85, 0.85, 4.9, 0.75, 48), f1m, x, 0, z, 1.85); mesh(once("f1ring", () => new THREE.TorusGeometry(1.32, 0.12, 8, 40).rotateX(Math.PI / 2)), std("#3a3734", { metalness: 0.6, roughness: 0.5 }), s1, x, 2.2, z); }
+    const fairGeo = once("svFair", () => latheGeo([[1.15, 3.6], [1.24, 3.8], [1.56, 5.2], [1.76, 6.6], [1.82, 7.4]], 40));
+    const finShape = new THREE.Shape([new THREE.Vector2(0, 3.0), new THREE.Vector2(4.2, 3.0), new THREE.Vector2(4.2, 5.0), new THREE.Vector2(0, 9.6)]);
+    const finGeo = once("svFin", () => new THREE.ExtrudeGeometry(finShape, { depth: 0.16, bevelEnabled: false }).translate(0, 0, -0.08).rotateY(-Math.PI / 2));
+    const whiteDS = std(paint, { roughness: 0.5, side: THREE.DoubleSide });
+    for (const a of Q) {
+      mesh(fairGeo, whiteDS, s1, Math.sin(a) * 3.2, 0, Math.cos(a) * 3.2);
+      const f = skin(s1, a, 4.3, 0); mesh(finGeo, white, f); box(0.26, 2.0, 0.36, white, f, 0, 3.9, 4.0); // fin and its tip pod
+    }
+    // S-II interstage ring with its eight ullage motors (dropped 30 s after staging)
+    cyl(R1 + 0.02, R1 + 0.02, SV.sic, SV.is, std("#ffffff", { map: ctex("svIS", 1024, 256, (g, w, h) => { g.fillStyle = paint; g.fillRect(0, 0, w, h); g.fillStyle = "rgba(0,0,0,.22)"; g.fillRect(0, 3, w, 3); g.fillRect(0, h - 6, w, 3); g.fillRect(0, h * 0.45, w, 2); }), roughness: 0.5 }), inter, 128, true);
+    for (let i = 0; i < 8; i++) { const s = skin(inter, (i / 8) * TAU + 0.2, R1, 44.6); mesh(once("ullage", () => new THREE.CylinderGeometry(0.2, 0.26, 1.8, 16)), white, s, 0, 0.3, 0.22); mesh(once("ullageN", () => new THREE.ConeGeometry(0.18, 0.4, 16, 1, true)), black, s, 0, -0.75, 0.22).rotation.x = Math.PI; }
+    // S-II: five J-2s inside the interstage, "UNITED STATES" down the side
+    const j2m = engineMats("#45423f", "#2a2826", "#cfd8ff"), J2 = [[0, 0], ...Q.map((a) => [Math.sin(a) * 2.7, Math.cos(a) * 2.7])];
+    for (const [x, z] of J2) bell(s2, bellGeo("j2", 1.0, 0.4, 3.0, 0.8, 36), j2m, x, 41.8, z, 1.0);
+    cyl(R1, R1, SV.is, SV.s2, std("#ffffff", { map: ctex("svS2", 1024, 1024, (g, w, h) => { g.fillStyle = paint; g.fillRect(0, 0, w, h); g.fillStyle = "rgba(0,0,0,.12)"; for (const f of [0.23, 0.42, 0.62, 0.81]) g.fillRect(0, f * h, w, 2); g.fillStyle = "rgba(0,0,0,.25)"; g.fillRect(0, 2, w, 3); g.fillRect(0, h - 5, w, 3); }), roughness: 0.5 }), s2, 128, true);
+    mesh(new THREE.CircleGeometry(R1, 64).rotateX(Math.PI / 2), black, s2, 0, SV.is + 0.05, 0);
+    label(s2, R1 + 0.02, 48.9, 64.6, SVF + 0.28, 1.2, vtext("UNITED STATES", "#151618"), 48);
+    // S-IVB with its aft interstage cone (stays with the S-II), the roll pattern on its aft skirt, the APS pods
+    lathe([[R1 + 0.02, SV.s2], [R1 - 0.05, SV.s2 + 0.3], [R3 + 0.04, SV.ais]], std(paint, { roughness: 0.5, side: THREE.DoubleSide }), s2, 128);
+    for (const a of Q) { const s = skin(s2, a, (R1 + R3) / 2, 68.8); s.rotation.x = -17 * D2R; box(0.42, 2.0, 0.3, white, s, 0, 0, 0.15); }
+    bell(s4b, bellGeo("j2", 1.0, 0.4, 3.0, 0.8, 36), j2m, 0, 67.8, 0, 1.0);
+    cyl(R3, R3, SV.ais, SV.s4, std("#ffffff", { map: ctex("svS4", 1024, 1024, (g, w, h) => { g.fillStyle = paint; g.fillRect(0, 0, w, h); g.fillStyle = "#151618"; for (const a of [SVF - Math.PI / 4, SVF + (3 * Math.PI) / 4]) span(g, w, h, SV.ais, SV.s4, a, a + Math.PI / 2, SV.ais, 75.5); g.fillStyle = "rgba(0,0,0,.14)"; for (const f of [0.3, 0.55, 0.75]) g.fillRect(0, f * h, w, 2); }), roughness: 0.5 }), s4b, 128, true);
+    mesh(new THREE.CircleGeometry(R3, 64).rotateX(Math.PI / 2), black, s4b, 0, SV.ais + 0.05, 0);
+    for (const a of [SVF + Math.PI / 2, SVF - Math.PI / 2]) { const s = skin(s4b, a, R3, 72.6); mesh(once("aps", () => new THREE.CapsuleGeometry(0.5, 1.6, 6, 16)), white, s, 0, 0, 0.32); box(0.5, 1.2, 0.3, black, s, 0, -0.2, 0.62); }
+    cyl(R3 + 0.02, R3 + 0.02, SV.s4, SV.iu, std("#ffffff", { map: ctex("svIU", 1024, 64, (g, w, h) => { g.fillStyle = "#c7c9cb"; g.fillRect(0, 0, w, h); g.fillStyle = "rgba(0,0,0,.3)"; for (let x = 0; x < w; x += w / 16) g.fillRect(x, 0, 2, h); g.fillRect(0, 0, w, 3); g.fillRect(0, h - 3, w, 3); }), metalness: 0.5, roughness: 0.4 }), s4b, 128, true);
+    // spacecraft-LM adapter: a fixed ring and four panels hinged at their foot that open like petals; Eagle inside
+    const rS = (y) => R3 - ((R3 - 1.96) * (y - SV.iu)) / (SV.sla - SV.iu), hy = 88.3, slaM = std("#e9e9e4", { roughness: 0.55, side: THREE.DoubleSide });
+    cyl(rS(hy), R3 + 0.02, SV.iu, hy, slaM, s4b, 128, true);
+    const lm = K.lunarModule({ folded: true }); lm.root.position.y = SV.iu - 0.2; s4b.add(lm.root);
+    const petals = [0, 1, 2, 3].map((i) => {
+      const hg = new THREE.Group(), pv = new THREE.Group(); hg.rotation.y = SVF + (i * Math.PI) / 2; hg.position.y = hy; s4b.add(hg); pv.position.z = rS(hy); hg.add(pv);
+      mesh(new THREE.CylinderGeometry(1.96, rS(hy), SV.sla - hy, 24, 1, true, -Math.PI / 4, Math.PI / 2), slaM, pv, 0, (SV.sla - hy) / 2, -rS(hy));
+      return { hg, pv, r0: rS(hy) };
+    });
+    // CSM under the boost protective cover, and the launch escape tower: red truss, escape motor, canards, Q-ball
+    const csm = apolloCSM(); csm.root.position.y = SV.cm; root.add(csm.root);
+    lathe([[2.03, 98.95], [2.02, 99.2], [0.48, 102.2], [0.36, SV.bpc]], std("#f2f2ee", { roughness: 0.45 }), les, 96);
+    const red = std("#b34a2c", { roughness: 0.5, metalness: 0.25 }), tb = batch(red, les);
+    const leg = (a, y) => { const w = 0.56 - ((y - SV.bpc) / (SV.tower - SV.bpc)) * 0.24; return V3(Math.sin(a) * w, y, Math.cos(a) * w); };
+    const strut = (A, B, r) => { const L = A.distanceTo(B), g = new THREE.CylinderGeometry(r, r, L, 8), q = new THREE.Quaternion().setFromUnitVectors(V3(0, 1, 0), B.clone().sub(A).normalize()); g.applyQuaternion(q).translate((A.x + B.x) / 2, (A.y + B.y) / 2, (A.z + B.z) / 2); tb.add(g); };
+    const QA = [0, 1, 2, 3].map((i) => SVF + Math.PI / 4 + (i * Math.PI) / 2);
+    for (const a of QA) strut(leg(a, SV.bpc), leg(a, SV.tower), 0.07);
+    for (let y = SV.bpc; y < SV.tower - 0.5; y += 1.07) for (let i = 0; i < 4; i++) { strut(leg(QA[i], y), leg(QA[(i + 1) % 4], y + 1.07), 0.035); strut(leg(QA[i], y + 1.07), leg(QA[(i + 1) % 4], y + 1.07), 0.04); }
+    tb.done();
+    const motorWhite = std("#f1f1ee", { roughness: 0.45 });
+    lathe([[0.54, SV.tower], [0.54, 107.1], [0.46, 109.4], [0.36, SV.motor]], motorWhite, les, 48);
+    for (const a of QA) { const n = mesh(once("lesNoz", () => new THREE.CylinderGeometry(0.1, 0.2, 0.55, 16, 1, true)), black, les, Math.sin(a) * 0.5, 107.0, Math.cos(a) * 0.5); n.quaternion.setFromUnitVectors(V3(0, -1, 0), V3(Math.sin(a) * 0.55, -0.83, Math.cos(a) * 0.55)); }
+    lathe([[0.36, SV.motor], [0.3, 110.3], [0.26, 110.4]], black, les, 32);
+    for (const a of [SVF, SVF + Math.PI]) box(0.06, 0.4, 0.3, motorWhite, skin(les, a, 0.27, 110.6), 0, 0, 0.12); // canards, folded
+    lathe(Array.from({ length: 9 }, (_, i) => { const f = i / 8; return [0.26 * Math.cos(f * (Math.PI / 2)), 110.4 + 0.8 * Math.sin(f * (Math.PI / 2))]; }), motorWhite, les, 32);
+    // engines
+    const em1 = f1m, f1fire = exhaust(s1, { re: 1.85, len: 120, kind: "f1", cluster: F1, nozR: 1.85, glow: em1.in });
+    const j2fire = exhaust(s2, { at: [0, 41.8, 0], re: 1.0, len: 75, kind: "hydrolox", cluster: J2, nozR: 1.0, glow: j2m.in });
+    const s4fire = exhaust(s4b, { at: [0, 67.8, 0], re: 1.0, len: 48, kind: "hydrolox", glow: j2m.in });
+    const lesF = QA.map((a) => exhaust(les, { at: [Math.sin(a) * 0.62, 106.8, Math.cos(a) * 0.62], re: 0.2, len: 14, kind: "solid", dir: [Math.sin(a) * 0.55, -0.83, Math.cos(a) * 0.55] }));
+    return {
+      root, len: SV.tip, parts: { s1, inter, s2, s4b, les, csm: csm.root }, petals, csm, lm,
+      fires: { f1: f1fire, j2: j2fire, s4: s4fire, les: (p, th) => lesF.forEach((f) => f(p, th)), sps: csm.fire },
+    };
+  }
+
+  // ---------------------------------------------------------------- Orion (Artemis II) and the ICPS
+  // root origin = the base of the crew module's heat shield; the service module hangs below it, the ICPS below that.
+  function orionCM({ burnt = false } = {}) {
+    const root = new THREE.Group(), R = 2.51, side = (y) => R - ((y - 0.2) * (R - 0.78)) / (3.05 - 0.2);
+    // Artemis II's backshell tiles carry a reflective silver coating; a copper-coloured band and a blue one near the base
+    const shellT = ctex("orionShell", 1024, 512, (g, w, h) => {
+      g.fillStyle = "#c9ccd0"; g.fillRect(0, 0, w, h); const r = rng(51);
+      for (let i = 0; i < 48; i++) for (let j = 0; j < 14; j++) { const c = 186 + 26 * r(); g.fillStyle = `rgb(${c},${c + 2},${c + 5})`; g.fillRect((i * w) / 48 + 1, (j * h) / 14 + 1, w / 48 - 2, h / 14 - 2); }
+      g.fillStyle = "#9a5a2c"; g.fillRect(0, h * 0.94, w, h * 0.05); g.fillStyle = "#2d5aa8"; g.fillRect(0, h * 0.58, w, h * 0.022);
+    });
+    const shell = burnt ? std("#62503f", { roughness: 0.85, metalness: 0.15 }) : std("#ffffff", { map: shellT, metalness: 0.85, roughness: 0.28 });
+    lathe([[0.01, -0.32], [1.2, -0.28], [2.2, -0.14], [2.48, -0.03], [2.51, 0.06]], std("#4e3d2e", { roughness: 0.95 }), root, 96);
+    lathe([[2.51, 0.06], [2.47, 0.2], [0.78, 3.05], [0.74, 3.3], [0.01, 3.33]], shell, root, 128);
+    const glass = std("#05070a", { metalness: 0.9, roughness: 0.08 });
+    for (const a of [-0.55, 0.55, Math.PI - 0.55, Math.PI + 0.55]) { const s = skin(root, a, side(1.75) + 0.01, 1.75); s.rotation.x = -31 * D2R; mesh(once("orWin", () => new THREE.PlaneGeometry(0.34, 0.4)), glass, s); }
+    { const s = skin(root, 0, side(1.3) + 0.012, 1.3); s.rotation.x = -31 * D2R; mesh(new THREE.RingGeometry(0.55, 0.6, 4, 1, Math.PI / 4).scale(0.9, 1.25, 1), std("#55595f"), s); }
+    for (const a of [-1.05, 1.05, 0.25, 2.6, 4.2]) { const s = skin(root, a, side(2.65) + 0.01, 2.65); s.rotation.x = -31 * D2R; for (const dy of [0, 0.25]) mesh(once("orRcs", () => new THREE.CircleGeometry(0.05, 10)), std("#020203"), s, 0, dy, 0); }
+    return { root, top: 3.33, R };
+  }
+  // the service module (white blankets, four folded solar wings, the OMS-E), the ICPS when `icps`
+  function orionStack({ icps = false } = {}) {
+    const root = new THREE.Group(), orion = new THREE.Group(); root.add(orion);
+    const cm = orionCM(); orion.add(cm.root);
+    const blanket = std("#ffffff", { map: ctex("esm", 1024, 512, (g, w, h) => { g.fillStyle = "#eeeeea"; g.fillRect(0, 0, w, h); const r = rng(61); for (let i = 0; i < 16; i++) for (let j = 0; j < 6; j++) { g.fillStyle = `rgba(0,0,0,${0.03 + 0.06 * r()})`; g.fillRect((i * w) / 16, (j * h) / 6, w / 16, h / 6); } g.strokeStyle = "rgba(0,0,0,.14)"; g.lineWidth = 2; for (let i = 0; i <= 16; i++) { g.beginPath(); g.moveTo((i * w) / 16, 0); g.lineTo((i * w) / 16, h); g.stroke(); } g.fillStyle = "#d8d9d6"; g.fillRect(0, h * 0.3, w, h * 0.12); }), roughness: 0.55 });
+    const dark = std("#34363a", { metalness: 0.8, roughness: 0.3, side: THREE.DoubleSide });
+    lathe([[2.51, -0.02], [2.4, -0.4], [2.05, -0.78]], std("#d9dbdd", { metalness: 0.6, roughness: 0.35 }), orion, 96); // crew module adapter
+    cyl(2.05, 2.05, -4.4, -0.78, blanket, orion, 96, true);
+    lathe([[2.05, -4.4], [1.6, -4.55], [0.5, -4.6]], std("#b9bcc0", { metalness: 0.7, roughness: 0.4 }), orion, 64);
+    const em = engineMats("#3e4044", "#2a2826", "#ffc89a");
+    bell(orion, bellGeo("omse", 0.62, 0.22, 1.9, 0.7, 36), em, 0, -6.5, 0, 0.62);
+    for (let i = 0; i < 8; i++) { const a = (i / 8) * TAU + 0.2; mesh(once("aux", () => new THREE.CylinderGeometry(0.05, 0.11, 0.24, 10, 1, true)), dark, orion, Math.sin(a) * 1.7, -4.72, Math.cos(a) * 1.7); }
+    for (let i = 0; i < 4; i++) { const s = skin(orion, (i * Math.PI) / 2, 2.05, -1.35); box(0.4, 0.5, 0.3, std("#dcdcd8"), s, 0, 0, 0.12); }
+    // four solar array wings (three panels each): folded down the module for launch, an X 19 m across once deployed
+    const cellsT = ctex("orCells", 512, 512, (g, w, h) => { g.fillStyle = "#565d6a"; g.fillRect(0, 0, w, h); const r = rng(5); for (let i = 0; i < 8; i++) for (let j = 0; j < 8; j++) { const k = 0.8 + 0.4 * r(); g.fillStyle = `rgb(${16 * k},${28 * k},${60 * k})`; g.fillRect((i * w) / 8 + 3, (j * h) / 8 + 3, w / 8 - 6, h / 8 - 6); } });
+    const wc = std("#ffffff", { map: cellsT, metalness: 0.4, roughness: 0.3 }), wings = [];
+    for (let i = 0; i < 4; i++) {
+      const a = Math.PI / 4 + (i * Math.PI) / 2, h = new THREE.Group(); h.rotation.y = a - Math.PI / 2; h.position.y = -1.9; orion.add(h); wings.push(h);
+      rod([2.0, 0, 0], [2.85, 0, 0], 0.06, dark, h);
+      for (let p = 0; p < 3; p++) { const q = box(2.25, 0.05, 1.95, wc, h, 3.0 + p * 2.32 + 1.1, 0, 0); q.rotation.x = 0.35; }
+    }
+    const rcs = thrusters(orion, [0, 1, 2, 3].map((i) => { const a = (i * Math.PI) / 2; return [[Math.sin(a) * 2.1, -1.35, Math.cos(a) * 2.1], [0, -1, 0]]; }), 1.2);
+    let stage = null, rl10 = () => {};
+    if (icps) {
+      // the Interim Cryogenic Propulsion Stage: the adapter cone, its white hydrogen tank, the insulated LOX tank slung
+      // below on a truss, and the RL10B-2 with its long carbon nozzle extension
+      stage = new THREE.Group(); root.add(stage);
+      const sw = std("#f0efe9", { roughness: 0.5 });
+      lathe([[2.05, -4.95], [2.4, -5.6], [2.58, -6.2]], std("#e7e7e1", { roughness: 0.5, side: THREE.DoubleSide }), stage, 96);
+      cyl(2.58, 2.58, -7.4, -6.2, std("#e6e8ea", { roughness: 0.45, metalness: 0.3 }), stage, 96); // Orion stage adapter
+      cyl(2.55, 2.55, -14.6, -7.4, std("#ffffff", { map: ctex("icps", 1024, 512, (g, w, h) => { g.fillStyle = "#f2f1ec"; g.fillRect(0, 0, w, h); g.fillStyle = "rgba(0,0,0,.12)"; g.fillRect(0, h * 0.3, w, 3); g.fillRect(0, h * 0.7, w, 3); g.fillStyle = "#101010"; for (let i = 0; i < 4; i++) g.fillRect((i / 4) * w + w * 0.03, h * 0.05, w * 0.03, h * 0.08); }), roughness: 0.5 }), stage, 96, true);
+      mesh(once("icpsLox", () => new THREE.SphereGeometry(1.65, 48, 24)), std("#b68a46", { metalness: 0.75, roughness: 0.4 }), stage, 0, -15.3, 0).scale.y = 0.72;
+      for (let i = 0; i < 8; i++) { const a = (i / 8) * TAU + 0.2; rod([Math.sin(a) * 2.45, -14.6, Math.cos(a) * 2.45], [Math.sin(a + 0.35) * 1.5, -16.2, Math.cos(a + 0.35) * 1.5], 0.06, dark, stage); }
+      const rm = engineMats("#262626", "#1e1c1a", "#d4dcff");
+      bell(stage, bellGeo("rl10x", 1.07, 0.3, 4.2, 0.72, 48), rm, 0, -21.0, 0, 1.07);
+      cyl(0.32, 0.45, -16.8, -16.3, std("#5b5b5e", { metalness: 0.7, roughness: 0.4 }), stage, 24);
+      rl10 = exhaust(stage, { at: [0, -21.0, 0], re: 1.07, len: 34, kind: "hydrolox", glow: rm.in });
+    }
+    const fire = exhaust(orion, { at: [0, -6.5, 0], re: 0.62, len: 16, kind: "hyper", glow: em.in });
+    // arrays: 0 = folded inside the fairing, 1 = deployed into the X
+    const arrays = (k) => wings.forEach((h) => { h.scale.set(Math.max(0.02, k), 1, 1); h.visible = k > 0.01; });
+    return { root, orion, stage, rcs, top: 3.33, fire, rl10, arrays };
+  }
+
+  // ---------------------------------------------------------------- SLS Block 1 (Artemis II) on Mobile Launcher 1
+  // metres above the launcher deck: the boosters stand on their aft skirts at 1.4 (nozzle exits at 0), 54 m to their
+  // noses; the core stage from its boat-tail at 5.0 (RS-25 exits at 0.9) up through the engine section, hydrogen tank,
+  // intertank and oxygen tank to its forward skirt at 69.6; the adapter cone to 77.6; ICPS and Orion stage adapter;
+  // fairing panels to 85.8; Orion under the launch abort system's ogive; the abort tower to 101.
+  const SL = { RC: 4.2, RB: 1.85, XB: 6.6, base: 5.0, boat: 6.0, eng: 10.5, lh2: 44.5, it: 51.2, lox: 64.6, top: 69.6, lvsa: 77.6, cm: 86.0 };
+  const SLF = 0.48; // the side the launch cameras look at
+  function slsStack() {
+    const root = new THREE.Group(), RC = SL.RC, RB = SL.RB, XB = SL.XB;
+    const foamT = ctex("slsFoam", 1024, 2048, (g, w, h) => { // sprayed-on foam: orange, darkening in the sun, blotchy, with photogrammetry marks
+      const Y = (y) => (1 - (y - SL.eng) / (SL.top - SL.eng)) * h, r = rng(23);
+      g.fillStyle = "#c7672a"; g.fillRect(0, 0, w, h);
+      for (let i = 0; i < 9000; i++) { const c = r(); g.fillStyle = c < 0.5 ? `rgba(110,46,12,${0.07 * r()})` : `rgba(240,150,80,${0.07 * r()})`; g.beginPath(); g.arc(r() * w, r() * h, 2 + 14 * r(), 0, TAU); g.fill(); }
+      g.fillStyle = "rgba(90,35,8,.25)"; for (const y of [17.3, 24.1, 30.9, 37.7, 57.9]) g.fillRect(0, Y(y), w, 2);
+      const ck = (a, y, s) => { const x = (a / TAU) * w, yy = Y(y), px = (s / (TAU * RC)) * w, py = (s / (SL.top - SL.eng)) * h; g.fillStyle = "#fff"; g.fillRect(x - px, yy - py, px * 2, py * 2); g.fillStyle = "#111"; g.fillRect(x - px, yy - py, px, py); g.fillRect(x, yy, px, py); };
+      for (const [a, y] of [[SLF - 0.2, 40], [SLF + 0.75, 30], [SLF - 0.55, 21], [SLF + 0.1, 60], [SLF - 0.65, 54], [SLF - 0.2, 68.2]]) ck(a, y, 0.28);
+      g.fillStyle = "#f4f2ea"; for (const [a, y] of [[SLF - 0.35, 42.5], [SLF + 0.3, 33.5], [SLF - 0.25, 62], [SLF + 0.45, 56]]) { g.beginPath(); g.ellipse((a / TAU) * w, Y(y), (0.16 / (TAU * RC)) * w, (0.16 / (SL.top - SL.eng)) * h, 0, 0, TAU); g.fill(); }
+    });
+    const foam = std("#ffffff", { map: foamT, roughness: 0.88 }), foamDS = std("#ffffff", { map: foamT, roughness: 0.88, side: THREE.DoubleSide });
+    const tan = std("#b9884d", { roughness: 0.85 }), pale = std("#d7d0c1", { roughness: 0.8 }), white = std("#f3f3ef", { roughness: 0.5 }), steel = std("#b5b9be", { metalness: 0.75, roughness: 0.35 }), dark = std("#28292c", { roughness: 0.55, metalness: 0.3 });
+    const core = new THREE.Group(); root.add(core);
+    // engine section and boat-tail (light thermal protection), the four RS-25s
+    lathe([[3.65, SL.base], [RC, SL.boat], [RC, SL.eng]], std("#ffffff", { map: ctex("slsEng", 1024, 256, (g, w, h) => { g.fillStyle = "#d9d2c3"; g.fillRect(0, 0, w, h); g.fillStyle = "rgba(0,0,0,.12)"; for (let x = 0; x < w; x += w / 64) g.fillRect(x, h * 0.2, 1.5, h * 0.8); for (const a of [SLF - 0.4, SLF + 0.9]) g.strokeRect((a / TAU) * w - 12, h * 0.35, 24, h * 0.3); }), roughness: 0.8 }), core, 128);
+    mesh(new THREE.CircleGeometry(3.66, 64).rotateX(Math.PI / 2), std("#3b3833", { roughness: 0.9 }), core, 0, SL.base + 0.02, 0);
+    const rsT = ctex("rs25", 512, 256, (g, w, h) => { g.fillStyle = "#6a6158"; g.fillRect(0, 0, w, h); for (let x = 0; x < w; x += 2.4) { g.fillStyle = `rgba(30,20,12,${0.3 + 0.2 * Math.sin(x * 1.3)})`; g.fillRect(x, 0, 1.1, h); } g.fillStyle = "rgba(255,240,220,.18)"; for (const f of [0.18, 0.4, 0.6, 0.8]) g.fillRect(0, f * h, w, 3); });
+    const rsm = { out: std("#ffffff", { map: rsT, metalness: 0.65, roughness: 0.45 }), in: std("#2b2622", { metalness: 0.4, roughness: 0.65, side: THREE.BackSide, emissive: new THREE.Color("#cfd8ff"), emissiveIntensity: 0 }) };
+    const RS = [[-1.65, -1.65], [1.65, -1.65], [-1.65, 1.65], [1.65, 1.65]];
+    for (const [x, z] of RS) { bell(core, bellGeo("rs25", 1.17, 0.56, 4.15, 0.6, 48), rsm, x, 0.9, z, 1.17); mesh(once("rsBoot", () => new THREE.CylinderGeometry(0.62, 0.78, 0.35, 32)), std("#e2ddd2", { roughness: 0.9 }), core, x, 4.85, z); }
+    // hydrogen tank, intertank (stringers between tan bands), oxygen tank and forward skirt in one foam skin
+    cyl(RC, RC, SL.eng, SL.top, foam, core, 128, true);
+    cyl(RC + 0.035, RC + 0.035, SL.lh2, SL.it, std("#ffffff", { map: foamT, roughness: 0.85, normalMap: normal("slsITN", 1024, 32, (g, w, h) => { for (let x = 0; x < w; x++) { const v = 128 + 110 * Math.max(0, Math.sin((x / w) * TAU * 96)) ** 6; g.fillStyle = `rgb(${v},${v},${v})`; g.fillRect(x, 0, 1, h); } }, 4) }), core, 128, true);
+    for (const [y0, y1] of [[SL.lh2 - 0.05, SL.lh2 + 0.4], [SL.it - 0.4, SL.it + 0.05], [SL.lox - 0.05, SL.lox + 0.4], [SL.top - 0.4, SL.top]]) cyl(RC + 0.05, RC + 0.05, y0, y1, tan, core, 128, true);
+    // LOX feedlines and pressurisation lines down the hydrogen tank, the systems tunnel, umbilical plates
+    for (const a of [SLF + 0.42, SLF + 0.42 + Math.PI]) {
+      const c = (y, r = RC + 0.42) => [Math.sin(a) * r, y, Math.cos(a) * r];
+      rod(c(10.6), c(45.2), 0.24, foam, core); rod(c(45.2), c(45.5, RC), 0.24, foam, core); rod(c(10.6), c(10.4, RC), 0.24, foam, core);
+      for (let y = 15; y < 44; y += 4.6) box(0.6, 0.18, 0.45, foam, skin(core, a, RC, y), 0, 0, 0.22);
+      for (const d of [0.09, 0.14]) rod([Math.sin(a + d) * (RC + 0.13), 11.0, Math.cos(a + d) * (RC + 0.13)], [Math.sin(a + d) * (RC + 0.13), 45.5, Math.cos(a + d) * (RC + 0.13)], 0.055, foam, core);
+    }
+    box(0.46, 33, 0.26, foam, skin(core, SLF + 0.62, RC, 27.6), 0, 0, 0.1);
+    for (const d of [-0.25, 0.25]) box(1.0, 1.2, 0.16, steel, skin(core, SLF + Math.PI + d, RC, 7.8), 0, 0, 0.06);
+    // the launch vehicle stage adapter: a short cylinder, then the cone up to the ICPS
+    lathe([[RC, SL.top], [RC, 71.4], [2.59, SL.lvsa]], foamDS, core, 128);
+    lathe([[RC + 0.05, SL.top], [RC + 0.05, SL.top + 0.4]], tan, core, 128); lathe([[RC + 0.05, 71.0], [RC + 0.05, 71.4]], tan, core, 128);
+    lathe([[2.72, 77.2], [2.6, SL.lvsa]], tan, core, 96);
+    // boosters: aft skirt on the posts, nozzle, five steel segments, forward skirt and nose; the NASA worm, America 250
+    // and checkered photogrammetry rings. Their exhaust comes out at y = 0.
+    const srbT = ctex("srb", 512, 2048, (g, w, h) => {
+      const Y = (y) => (1 - (y - 5.0) / (48.4 - 5.0)) * h;
+      g.fillStyle = "#f2f2ef"; g.fillRect(0, 0, w, h);
+      g.fillStyle = "rgba(0,0,0,.18)"; for (const y of [9, 17, 25, 33, 41]) g.fillRect(0, Y(y), w, 2);
+      const ring = (y, n, s) => { for (let i = 0; i < n; i++) { g.fillStyle = i % 2 ? "#111" : "#f2f2ef"; g.fillRect((i / n) * w, Y(y + s / 2), w / n + 0.5, Y(y - s / 2) - Y(y + s / 2)); } };
+      for (const y of [43.6, 36.2, 20.4, 12.2]) ring(y, 28, 0.32);
+      g.fillStyle = "#111"; for (const [u, y] of [[0.12, 40], [0.9, 33], [0.1, 25], [0.85, 17], [0.15, 9.5]]) { g.fillRect(u * w - 6, Y(y + 0.13), 12, Y(y - 0.13) - Y(y + 0.13)); }
+    });
+    const srbM = std("#ffffff", { map: srbT, roughness: 0.5 }), srbs = [-1, 1].map((sd) => {
+      const g = new THREE.Group(); g.position.x = sd * XB; root.add(g);
+      lathe([[2.7, 1.4], [2.7, 1.64], [2.62, 1.7], [1.91, 4.6], [1.89, 5.0]], std("#ebebe7", { roughness: 0.6, side: THREE.DoubleSide }), g, 96);
+      bell(g, once("srbNoz", () => latheGeo([[1.93, 0], [1.93, 0.12], [1.76, 0.4], [1.52, 0.9], [1.34, 1.4], [1.3, 1.6]], 64)), { out: std("#2c2b29", { roughness: 0.7, metalness: 0.2 }), in: std("#141210", { roughness: 0.9, side: THREE.BackSide, emissive: new THREE.Color("#ffd9a0"), emissiveIntensity: 0 }) }, 0, 0, 0);
+      const seg = cyl(RB, RB, 5.0, 48.4, srbM, g, 96, true); seg.rotation.y = sd < 0 ? SLF + Math.PI : SLF;
+      for (const y of [13, 21, 29, 37]) cyl(RB + 0.05, RB + 0.05, y - 0.22, y + 0.22, white, g, 96, true); // field joints
+      const nose = Array.from({ length: 17 }, (_, i) => { const f = i / 16, y = 48.4 + f * 6.8; return [y < 49.4 ? RB - (y - 48.4) * 0.09 : (RB - 0.09) * Math.pow(1 - (y - 49.4) / 5.8, 0.78) * (1 - 0.04 * ((y - 49.4) / 5.8)), y]; });
+      lathe(nose, white, g, 96);
+      if (sd < 0) cyl(RB + 0.01, RB + 0.01, 47.5, 48.0, std("#111", { roughness: 0.6 }), g, 96, true); // the black ring that marks the left booster
+      const out = sd < 0 ? Math.PI * 1.5 : Math.PI / 2; // outboard side
+      box(0.3, 41, 0.34, white, skin(g, out + 0.35 * sd, RB, 26.5), 0, 0, 0.1); // cable tray
+      const wa = SLF + 0.18 * -sd; // the worm, turned to read down the booster
+      label(g, RB + 0.012, 23.3, 27.7, wa, 1.2, (gg, w, h) => worm(gg, w / 2, h / 2, w * 0.82, { vertical: true, down: true }), 96);
+      label(g, RB + 0.012, 41.0, 42.6, SLF + 0.12 * -sd, 1.6, (gg, w, h) => { gg.textAlign = "center"; gg.fillStyle = "#1f3a7a"; gg.font = `700 ${h * 0.2}px Helvetica,Arial,sans-serif`; gg.fillText("AMERICA", w / 2, h * 0.24); gg.font = `900 ${h * 0.62}px Helvetica,Arial,sans-serif`; gg.lineWidth = h * 0.05; gg.strokeStyle = "#1f3a7a"; gg.strokeText("250", w / 2, h * 0.9); gg.fillStyle = "#c8202a"; gg.fillText("250", w / 2, h * 0.9); }, 96);
+      // attach hardware toward the core: forward ball fitting, three aft struts
+      const toCore = -sd;
+      rod([toCore * RB, 47.2, 0], [toCore * (XB - RC), 47.2, 0], 0.15, steel, g);
+      for (const [y0, y1, z] of [[7.0, 7.0, 0], [6.6, 8.8, 0.6], [9.0, 9.2, -0.6]]) rod([toCore * RB, y0, z], [toCore * (XB - RC), y1, z], 0.12, steel, g);
+      return g;
+    });
+    // ICPS, Orion stage adapter and Orion; the three fairing panels round the service module; the abort system
+    const o = orionStack({ icps: true }); o.root.position.y = SL.cm; root.add(o.root); o.arrays(0);
+    const sajT = ctex("saj", 1024, 256, (g, w, h) => {
+      g.fillStyle = "#efefec"; g.fillRect(0, 0, w, h); g.fillStyle = "rgba(0,0,0,.12)"; for (let i = 0; i < 24; i++) g.fillRect((i * w) / 24, 0, 2, h);
+      meatball(g, w * 0.17, h * 0.42, h * 0.3); g.fillStyle = "#003247"; g.beginPath(); g.arc(w * 0.17 - h * 0.17, h * 0.85, h * 0.07, 0, TAU); g.fill(); g.font = `bold ${h * 0.16}px Helvetica,Arial,sans-serif`; g.fillText("esa", w * 0.17 - h * 0.06, h * 0.9);
+      for (const x of [0.06, 0.29]) { g.fillStyle = "#fff"; g.fillRect(x * w, h * 0.1, 14, 14); g.fillStyle = "#111"; g.fillRect(x * w, h * 0.1, 7, 7); g.fillRect(x * w + 7, h * 0.1 + 7, 7, 7); }
+    });
+    const sajM = std("#ffffff", { map: sajT, roughness: 0.5, side: THREE.DoubleSide });
+    const saj = [0, 1, 2].map((i) => {
+      const g = new THREE.Group(), a = SLF + (i * TAU) / 3; root.add(g);
+      mesh(new THREE.CylinderGeometry(2.64, 2.64, 4.4, 48, 1, true, a - Math.PI / 3 + 0.004, TAU / 3 - 0.008), sajM, g, 0, 83.6, 0);
+      mesh(new THREE.CylinderGeometry(2.64, 2.59, 0.6, 48, 1, true, a - Math.PI / 3 + 0.004, TAU / 3 - 0.008), sajM, g, 0, 81.1, 0);
+      g.userData.a = a; return g;
+    });
+    const las = new THREE.Group(); root.add(las);
+    const ogR = (y) => (y <= 86.4 ? 2.7 : 0.73 + (2.7 - 0.73) * Math.pow(1 - (y - 86.4) / 5.6, 1.25) * (1 + 0.64 * ((y - 86.4) / 5.6) * (1 - (y - 86.4) / 5.6)));
+    const ogT = ctex("ogive", 1024, 512, (g, w, h) => {
+      g.fillStyle = "#f2f2ee"; g.fillRect(0, 0, w, h); g.fillStyle = "rgba(0,0,0,.12)"; for (const x of [0.125, 0.375, 0.625, 0.875]) g.fillRect(x * w, 0, 2, h);
+      const cx = ((SLF / TAU) % 1) * w; flag(g, cx - 29, h * 0.66 - 15, 58, 30); // the flag, "United States" above it, the worm below
+      g.fillStyle = "#20242a"; g.font = "600 12px Helvetica,Arial,sans-serif"; g.textAlign = "center"; g.fillText("United States", cx, h * 0.56);
+      worm(g, cx, h * 0.8, 24);
+    });
+    lathe(Array.from({ length: 25 }, (_, i) => { const y = 85.6 + (i / 24) * 6.4; return [ogR(y), y]; }), std("#ffffff", { map: ogT, roughness: 0.45 }), las, 96);
+    lathe([[0.76, 91.95], [0.64, 92.8], [0.56, 93.8], [0.48, 96.8]], white, las, 48);
+    for (let i = 0; i < 4; i++) { const a = SLF + Math.PI / 4 + (i * Math.PI) / 2, n = mesh(once("abortNoz", () => latheGeo([[0.22, 0], [0.22, 0.12], [0.26, 0.25], [0.33, 0.55], [0.38, 0.72]].map(([r, y]) => [r, -y]), 24)), std(white.color, { roughness: 0.5, side: THREE.DoubleSide }), las, Math.sin(a) * 0.44, 93.4, Math.cos(a) * 0.44); n.quaternion.setFromUnitVectors(V3(0, -1, 0), V3(Math.sin(a) * 0.62, -0.78, Math.cos(a) * 0.62)); }
+    cyl(0.48, 0.46, 96.8, 98.8, white, las, 48);
+    for (const a of [SLF + 0.35, SLF + 0.35 + TAU / 3, SLF + 0.35 - TAU / 3]) mesh(once("jetPort", () => new THREE.PlaneGeometry(0.42, 0.55)), dark, skin(las, a, 0.48, 97.4), 0, 0, 0.005);
+    cyl(0.46, 0.46, 98.8, 99.6, white, las, 48);
+    for (let i = 0; i < 8; i++) mesh(once("acmPort", () => new THREE.PlaneGeometry(0.16, 0.22)), dark, skin(las, (i / 8) * TAU + 0.2, 0.465, 99.2), 0, 0, 0.004);
+    lathe(Array.from({ length: 13 }, (_, i) => { const f = i / 12; return [0.46 * Math.sqrt(Math.max(0, 1 - f * f)) * (1 - 0.15 * f), 99.6 + f * 1.4]; }), white, las, 48);
+    // engines: RS-25s (hydrogen: faint blue with Mach diamonds), boosters (solid: blinding, smoky), the abort motor
+    const rsFire = exhaust(core, { at: [0, 0.9, 0], re: 1.17, len: 60, kind: "hydrolox", cluster: RS, nozR: 1.17, glow: rsm.in });
+    const srbFire = srbs.map((g) => exhaust(g, { re: 1.93, len: 110, kind: "solid" }));
+    const lasF = [0, 1, 2, 3].map((i) => { const a = SLF + Math.PI / 4 + (i * Math.PI) / 2; return exhaust(las, { at: [Math.sin(a) * 0.9, 92.9, Math.cos(a) * 0.9], re: 0.38, len: 22, kind: "solid", dir: [Math.sin(a) * 0.62, -0.78, Math.cos(a) * 0.62] }); });
+    return {
+      root, len: 101, parts: { srbL: srbs[0], srbR: srbs[1], core, las, saj0: saj[0], saj1: saj[1], saj2: saj[2], orion: o.root }, saj, o,
+      fires: { rs25: rsFire, srb: (p, th) => srbFire.forEach((f) => f(p, th)), las: (p, th) => lasF.forEach((f) => f(p, th)), rl10: o.rl10, oms: o.fire },
+    };
+  }
+
+  return { falcon9Booster, f9Stack, crewDragon, superHeavy, starshipShip, starshipStack, apolloCM, apolloCSM, saturnV, orionCM, orionStack, slsStack };
 }
 // ---- Artemis II ascent, time-warped so the whole mission plays in about two minutes
 const T_START = -8, T_END = 12255 + 420;

@@ -2672,37 +2672,108 @@ void main() {
         const m = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.28, 1, 10, 1, true).translate(0, 0.5, 0), glow("#cfe0ff", 1.6, { map: plumeTex, opacity: 0.55 }));
         m.position.set(...p); m.quaternion.setFromUnitVectors(UP, V3(...d).normalize()); m.scale.set(1, len, 1); m.visible = false; parent.add(m); return m;
       });
-      return (rate) => ms.forEach((m) => { m.visible = Math.random() < rate; m.scale.set(1, len * (0.6 + 0.6 * Math.random()), 1); });
+      // each nozzle fires in short pulses on its own rhythm (smooth in time, so it doesn't flicker frame to frame)
+      return (rate) => { const c = G.rt; ms.forEach((m, i) => { const ph = (c * (1.3 + 0.37 * i) + i * 0.618) % 1; m.visible = rate > 0.001 && ph < Math.min(0.9, rate * 1.4); m.scale.set(1, len * (0.75 + 0.25 * Math.sin(c * 23 + i)), 1); }); };
     }
 
-    // dust, spray or steam thrown out where the exhaust hits the ground
-    function particles({ n = 4000, color, size, drag, rise, gravity, life, opacity, parent = world }) {
-      const pos = new Float32Array(n * 3).fill(-1e5), vel = new Float32Array(n * 3), age = new Float32Array(n).fill(1e9);
-      const geo = new THREE.BufferGeometry(); geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
-      const pts = new THREE.Points(geo, new THREE.PointsMaterial({ color, size, map: dotTex, transparent: true, opacity, depthWrite: false }));
-      pts.frustumCulled = false; parent.add(pts);
-      let head = 0, acc = 0;
+    // ---- smoke, steam, spray and dust: soft, sunlit billboard puffs that grow as they age, simulated on the CPU and
+    // drawn back to front. size = starting diameter (m), grow = how many times wider at the end of its life; glow(...)
+    // lights them from a fire (the engines at liftoff) by distance
+    const puffTex = () => once("puff", () => tex(256, 256, (g) => { // a 2 x 2 atlas of cloudy puffs (alpha)
+      const r = rng(71);
+      for (let k = 0; k < 4; k++) {
+        const ox = (k % 2) * 128, oy = Math.floor(k / 2) * 128;
+        for (let i = 0; i < 46; i++) {
+          const a = r() * TAU, d = 36 * Math.sqrt(r()), x = ox + 64 + Math.cos(a) * d, y = oy + 64 + Math.sin(a) * d, rr = 10 + 24 * r() * (1 - d / 48);
+          const gr = g.createRadialGradient(x, y, 0, x, y, rr); gr.addColorStop(0, "rgba(255,255,255,.3)"); gr.addColorStop(1, "rgba(255,255,255,0)");
+          g.fillStyle = gr; g.fillRect(ox, oy, 128, 128);
+        }
+      }
+    }, null, false));
+    const PUFF_V = `#include <common>
+#include <logdepthbuf_pars_vertex>
+attribute vec3 iPos; attribute vec4 iData; // size, opacity, rotation, atlas cell
+varying vec2 vUv, vQ; varying float vA; varying vec3 vW;
+void main() {
+  vec4 mv = modelViewMatrix * vec4(iPos, 1.0);
+  float c = cos(iData.z), s = sin(iData.z);
+  vec2 q = position.xy;
+  mv.xy += vec2(c * q.x - s * q.y, s * q.x + c * q.y) * iData.x;
+  gl_Position = projectionMatrix * mv;
+  vQ = q * 2.0; vA = iData.y; vW = (modelMatrix * vec4(iPos, 1.0)).xyz;
+  vUv = (q + 0.5) * 0.5 + vec2(mod(iData.w, 2.0), floor(iData.w / 2.0)) * 0.5;
+#include <logdepthbuf_vertex>
+}`;
+    const PUFF_F = `#include <common>
+#include <logdepthbuf_pars_fragment>
+uniform sampler2D uMap; uniform vec3 uCol, uSun, uAmb, uSunV, uGlowP, uGlowC; uniform float uGlowR;
+varying vec2 vUv, vQ; varying float vA; varying vec3 vW;
+void main() {
+#include <logdepthbuf_fragment>
+  float r2 = dot(vQ, vQ);
+  if (r2 > 1.0) discard;
+  float d = texture2D(uMap, vUv).a * vA;
+  if (d < 0.003) discard;
+  vec3 n = normalize(vec3(vQ, sqrt(1.0 - r2))); // a ball facing the camera, lit on the sun's side
+  float lit = clamp(dot(n, uSunV) * 0.6 + 0.45, 0.0, 1.0);
+  vec3 col = uCol * (uAmb + uSun * lit) + uGlowC * exp(-distance(vW, uGlowP) / uGlowR);
+  gl_FragColor = vec4(col * d, d);
+}`;
+    function particles({ n = 1500, color, size, grow = 3, drag, rise, gravity, life, opacity, parent = world }) {
+      const pos = new Float32Array(n * 3), vel = new Float32Array(n * 3), age = new Float32Array(n).fill(1e9), lf = new Float32Array(n).fill(1), sz = new Float32Array(n), rot = new Float32Array(n), spin = new Float32Array(n), cell = new Float32Array(n), al = new Float32Array(n).fill(-1);
+      const quad = once("puffQuad", () => new THREE.PlaneGeometry(1, 1)), geo = new THREE.InstancedBufferGeometry();
+      geo.index = quad.index; geo.setAttribute("position", quad.attributes.position);
+      const iPos = new THREE.InstancedBufferAttribute(new Float32Array(n * 3), 3).setUsage(THREE.DynamicDrawUsage), iData = new THREE.InstancedBufferAttribute(new Float32Array(n * 4), 4).setUsage(THREE.DynamicDrawUsage);
+      geo.setAttribute("iPos", iPos); geo.setAttribute("iData", iData); geo.instanceCount = 0;
+      const uni = { uMap: { value: puffTex() }, uCol: { value: new THREE.Color(color) }, uSun: { value: new THREE.Color() }, uAmb: { value: new THREE.Color() }, uSunV: { value: V3(0, 1, 0) }, uGlowP: { value: V3() }, uGlowC: { value: new THREE.Color(0, 0, 0) }, uGlowR: { value: 30 } };
+      const m = new THREE.Mesh(geo, new THREE.ShaderMaterial({ uniforms: uni, vertexShader: PUFF_V, fragmentShader: PUFF_F, transparent: true, depthWrite: false, blending: THREE.CustomBlending, blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor }));
+      m.frustumCulled = false; parent.add(m);
+      m.onBeforeRender = () => { uni.uSun.value.copy(sun.color).multiplyScalar(sun.intensity * 0.2); uni.uAmb.value.copy(hemi.color).multiplyScalar(0.25 + hemi.intensity * 0.5); };
+      sunViews.push((dir) => uni.uSunV.value.copy(dir).transformDirection(camera.matrixWorldInverse));
+      let head = 0, acc = 0, live = 0;
+      const order = new Uint32Array(n), dep = new Float32Array(n), cam = V3();
+      const write = () => { // alive puffs, farthest first
+        cam.copy(camera.position); parent.worldToLocal(cam);
+        live = 0;
+        for (let i = 0; i < n; i++) if (age[i] < lf[i]) { dep[i] = (pos[i * 3] - cam.x) ** 2 + (pos[i * 3 + 1] - cam.y) ** 2 + (pos[i * 3 + 2] - cam.z) ** 2; order[live++] = i; }
+        const o = order.subarray(0, live).sort((a, b) => dep[b] - dep[a]), P = iPos.array, D = iData.array;
+        for (let k = 0; k < live; k++) {
+          const i = o[k], f = age[i] / lf[i];
+          P[k * 3] = pos[i * 3]; P[k * 3 + 1] = pos[i * 3 + 1]; P[k * 3 + 2] = pos[i * 3 + 2];
+          D[k * 4] = sz[i] * (1 + (grow - 1) * Math.sqrt(f)); D[k * 4 + 1] = al[i] >= 0 ? al[i] : opacity * Math.min(1, f * 12) * (1 - f) ** 1.3; D[k * 4 + 2] = rot[i] + spin[i] * age[i]; D[k * 4 + 3] = cell[i];
+        }
+        geo.instanceCount = live; iPos.needsUpdate = iData.needsUpdate = true;
+      };
       return {
-        reset() { pos.fill(-1e5); age.fill(1e9); acc = 0; geo.attributes.position.needsUpdate = true; },
-        step(dt, src) { // src: {x, y, z, r0, rate, speed, up, burst, dir: [dx, dz] + cone (radians) for a one-sided jet}
+        reset() { age.fill(1e9); al.fill(-1); acc = 0; geo.instanceCount = 0; },
+        // draw these puffs as given, no simulation: [[x, y, z, size, opacity], ...]
+        place(list) {
+          for (let i = 0; i < n; i++) {
+            const q = list[i];
+            if (!q || q[4] < 0.004) { age[i] = 1e9; continue; }
+            pos[i * 3] = q[0]; pos[i * 3 + 1] = q[1]; pos[i * 3 + 2] = q[2]; sz[i] = q[3]; al[i] = q[4]; age[i] = 0; lf[i] = 1e9; rot[i] = i * 2.4; spin[i] = 0; cell[i] = i % 4;
+          }
+          write();
+        },
+        glow(x, y, z, col, k, R = 30) { uni.uGlowP.value.set(x, y, z); uni.uGlowC.value.set(col).multiplyScalar(k); uni.uGlowR.value = R; },
+        step(dt, src) { // src: {x, y, z, r0, rate, speed, up, burst, dir: [dx, dz] + cone (radians) for a one-sided jet, floor}
           if (dt <= 0) return;
           acc += src.rate * dt + (src.burst || 0);
           for (; acc >= 1; acc--) {
-            const i = head++ % n, a = src.dir ? Math.atan2(src.dir[1], src.dir[0]) + (Math.random() - 0.5) * (src.cone || 0.6) : Math.random() * Math.PI * 2, s = src.speed * (0.4 + 0.8 * Math.random());
-            pos.set([src.x + Math.cos(a) * src.r0, src.y + 0.3, src.z + Math.sin(a) * src.r0], i * 3);
-            vel.set([Math.cos(a) * s, src.up * Math.random(), Math.sin(a) * s], i * 3);
-            age[i] = 0;
+            const i = head++ % n, a = src.dir ? Math.atan2(src.dir[1], src.dir[0]) + (Math.random() - 0.5) * (src.cone || 0.6) : Math.random() * TAU, s = src.speed * (0.4 + 0.8 * Math.random());
+            pos[i * 3] = src.x + Math.cos(a) * src.r0; pos[i * 3 + 1] = src.y + 0.3; pos[i * 3 + 2] = src.z + Math.sin(a) * src.r0;
+            vel[i * 3] = Math.cos(a) * s; vel[i * 3 + 1] = src.up * Math.random(); vel[i * 3 + 2] = Math.sin(a) * s;
+            age[i] = 0; al[i] = -1; lf[i] = life * (0.7 + 0.6 * Math.random()); sz[i] = size * (0.6 + 0.8 * Math.random()); rot[i] = Math.random() * TAU; spin[i] = (Math.random() - 0.5) * 0.3; cell[i] = Math.floor(Math.random() * 4);
           }
-          const k = Math.exp(-drag * dt);
+          const k = Math.exp(-drag * dt), fl = src.floor ?? src.y;
           for (let i = 0; i < n; i++) {
-            if (age[i] > life) continue;
+            if (age[i] >= lf[i]) continue;
             age[i] += dt;
             const j = i * 3;
-            if (age[i] > life) { pos[j + 1] = -1e5; continue; }
             vel[j] *= k; vel[j + 2] *= k; vel[j + 1] = vel[j + 1] * k + (rise - gravity) * dt;
-            pos[j] += vel[j] * dt; pos[j + 1] = Math.max(src.floor ?? src.y, pos[j + 1] + vel[j + 1] * dt); pos[j + 2] += vel[j + 2] * dt;
+            pos[j] += vel[j] * dt; pos[j + 1] = Math.max(fl, pos[j + 1] + vel[j + 1] * dt); pos[j + 2] += vel[j + 2] * dt;
           }
-          geo.attributes.position.needsUpdate = true;
+          write();
         },
       };
     }
@@ -3242,12 +3313,13 @@ void main() {
     }
 
     // ---- liftoff: the pad, the stack on the deck, ignition, hold-down release and the climb out to ~1.5 km
-    function padScene({ pad, stk, rel, a, foot = 0, fires, focus, chase, smoke = "#efece6", dirs = [[1, 0], [-1, 0]], arms = [rel - 1, rel + 1.5], drift = 0, events = [] }) {
+    // trailK: how much smoke the engines leave behind them (solid boosters a lot, methane hardly any)
+    function padScene({ pad, stk, rel, a, foot = 0, fires, focus, chase, smoke = "#efece6", dirs = [[1, 0], [-1, 0]], arms = [rel - 1, rel + 1.5], drift = 0, trailK = 1, events = [] }) {
       const P = pad();
       exhFloor.y = P.deck;
       world.add(stk.root);
-      const smk = particles({ n: 9000, color: smoke, size: 26, drag: 0.35, rise: 3.5, gravity: 0, life: 16, opacity: 0.22 });
-      const trail = particles({ n: 6000, color: smoke, size: 14, drag: 0.6, rise: 0.8, gravity: 0, life: 22, opacity: 0.3 });
+      const smk = particles({ n: 1600, color: smoke, size: 22, grow: 3.4, drag: 0.35, rise: 3.5, gravity: 0, life: 18, opacity: 0.55 }); // steam rolling out of the trench
+      const trail = particles({ n: 1400, color: smoke, size: 7 + 4 * trailK, grow: 4.5, drag: 0.6, rise: 0.6, gravity: 0, life: 26, opacity: Math.min(0.85, 0.35 + 0.3 * trailK) });
       const light = new THREE.PointLight("#ffb46a", 0, 600, 2); world.add(light);
       let c = 0;
       const pos = V3();
@@ -3266,10 +3338,12 @@ void main() {
           P.arms(sm(arms[0], arms[1], t));
           if (P.sea) P.sea.update(c);
           const hb = st.pos.y - P.deck - foot;
-          if (dirs) for (const d of dirs) smk.step(dt, { x: d[0] * 55, y: P.smokeY, z: d[1] * 55, r0: 6, rate: pw * 160 * (1 - sm(40, 300, hb)), speed: 42, up: 9, dir: d, cone: 0.9, floor: P.smokeY });
-          else smk.step(dt, { x: 0, y: P.smokeY, z: 0, r0: 14, rate: pw * 320 * (1 - sm(40, 300, hb)), speed: 45, up: 6, floor: P.smokeY });
-          trail.step(dt, { x: st.pos.x, y: st.pos.y - 4, z: 0, r0: 2, rate: hb > 25 ? pw * 220 : 0, speed: 3, up: -4 });
-          light.position.set(st.pos.x, st.pos.y - 8, 0); light.intensity = 2.5e4 * pw * (0.9 + 0.1 * Math.random());
+          if (dirs) for (const d of dirs) smk.step(dt, { x: d[0] * 55, y: P.smokeY, z: d[1] * 55, r0: 6, rate: pw * 55 * (1 - sm(40, 300, hb)), speed: 42, up: 9, dir: d, cone: 0.9, floor: P.smokeY });
+          else smk.step(dt, { x: 0, y: P.smokeY, z: 0, r0: 14, rate: pw * 110 * (1 - sm(40, 300, hb)), speed: 45, up: 6, floor: P.smokeY });
+          trail.step(dt, { x: st.pos.x, y: st.pos.y - 6, z: 0, r0: 2, rate: hb > 12 ? pw * 45 * trailK : 0, speed: 3, up: -6, floor: P.smokeY });
+          const fl = 0.94 + 0.06 * Math.sin(c * 37) * Math.sin(c * 23);
+          light.position.set(st.pos.x, st.pos.y - 8, 0); light.intensity = 2.5e4 * pw * fl;
+          smk.glow(st.pos.x, P.deck, 0, "#ff9a48", pw * 1.8 * (1 - sm(20, 160, hb)), 45); trail.glow(st.pos.x, st.pos.y - 12, 0, "#ffa860", pw * 1.6, 22);
           G.shake = pw * 0.35 * (1 - sm(60, 600, hb));
         },
       };
@@ -3284,7 +3358,7 @@ void main() {
       const stage = stager(stk, seps);
       const vap = vapor ? mesh(new THREE.CylinderGeometry(vapor[3] * 1.15, vapor[3] * 2.6, vapor[3] * 3, 48, 1, true), new THREE.MeshBasicMaterial({ color: "#ffffff", transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide, map: plumeTex }), stk.root, 0, vapor[2], 0) : null;
       if (vap) vap.castShadow = false;
-      const puffs = Array.from({ length: 48 }, (_, i) => { const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: dotTex, color: "#ece8e0", transparent: true, depthWrite: false, opacity: 0 })); sp.userData.i = i; stk.root.add(sp); return sp; });
+      const puffs = particles({ n: 48, color: "#ece8e0", size: 1, grow: 1, drag: 0, rise: 0, gravity: 0, life: 1, opacity: 1, parent: stk.root }), trailPts = [];
       // downrange distance along the track, from the speed profile
       const t0 = e.a0, t1 = e.a1, N = 1200, X = new Float32Array(N + 1);
       for (let i = 1; i <= N; i++) { const ta = t0 + ((i - 1) * (t1 - t0)) / N, tb = t0 + (i * (t1 - t0)) / N, hv = info.hud((ta + tb) / 2); X[i] = X[i - 1] + (hv.vel / 3.6) * Math.sin(pitchAt(hv.alt)) * (tb - ta); }
@@ -3309,7 +3383,9 @@ void main() {
           let pw = 0; for (const [name, rows] of Object.entries(fires)) { const p = lin(rows, t); if (["m1d", "f1", "booster", "srb", "rs25"].includes(name)) pw = Math.max(pw, p); stk.fires[name](p, thin); }
           if (vap) { const k = sm(vapor[0], vapor[0] + 2, t) * (1 - sm(vapor[1] - 2, vapor[1], t)); vap.material.opacity = 0.35 * k * (0.8 + 0.2 * Math.random()); vap.visible = k > 0.01; }
           const tk = pw * (1 - sm(8, 38, alt)), w0 = stk.len * 0.06;
-          for (const sp of puffs) { const i = sp.userData.i, d = 6 + 9 * i + 0.6 * i * i, r = w0 * (1 + 0.08 * i) * (1 + alt * 0.08); sp.visible = tk > 0.02; sp.position.set(Math.sin(i * 1.7) * r * 0.15, -d, Math.cos(i * 2.3) * r * 0.15); sp.scale.setScalar(r * 2.4); sp.material.opacity = 0.5 * tk * (1 - i / 48); }
+          // the smoke trail left in the lower atmosphere, streaming away below the climbing stack
+          for (let i = 0; i < 48; i++) { const d = 6 + 9 * i + 0.6 * i * i, r = w0 * (1 + 0.08 * i) * (1 + alt * 0.08); trailPts[i] = [Math.sin(i * 1.7) * r * 0.15, -d, Math.cos(i * 2.3) * r * 0.15, r * 2.4, tk > 0.02 ? 0.8 * tk * (1 - i / 48) : 0]; }
+          puffs.place(trailPts);
           if (extra) extra(t, dt);
           G.shake = pw * 0.12 * (1 - sm(20, 60, alt));
         },
@@ -3404,7 +3480,7 @@ void main() {
     // each scene: { chase, focus, shadow, sunDir, events, tilt, ground(t), update(t, s, dt), root | place(t), reset, info, space, spin, zoom }
     const SCENES = {
       // ---- launch and ascent, one pad shot and one ascent shot per vehicle (times = mission seconds)
-      f9pad: () => padScene({ pad: padF9, stk: f9Stack(), rel: 0, a: 3.56, foot: 0.4, fires: { m1d: [[-3, 0], [-1.2, 1]] }, focus: 33, chase: [62, 4, 118] }),
+      f9pad: () => padScene({ pad: padF9, stk: f9Stack(), rel: 0, a: 3.56, foot: 0.4, trailK: 0.6, fires: { m1d: [[-3, 0], [-1.2, 1]] }, focus: 33, chase: [62, 4, 118] }),
       f9asc() {
         const s = f9Stack();
         return ascentScene({
@@ -3415,7 +3491,7 @@ void main() {
           extra: (t) => { s.dragon.setNose(sm(730, 744, t)); s.dragon.dracos(t > 700 && t < 716 ? 0.4 : 0); s.booster.fins(sm(166, 172, t)); },
         });
       },
-      shpad: () => padScene({ pad: padStarbase, stk: starshipStack(), rel: 0, a: 3.33, dirs: null, fires: { booster: [[-4, 0], [-0.8, 1]] }, focus: 61, chase: [120, 6, 200] }),
+      shpad: () => padScene({ pad: padStarbase, stk: starshipStack(), rel: 0, a: 3.33, trailK: 0.35, dirs: null, fires: { booster: [[-4, 0], [-0.8, 1]] }, focus: 61, chase: [120, 6, 200] }),
       shasc() {
         const s = starshipStack();
         return ascentScene({
@@ -3425,7 +3501,7 @@ void main() {
           foc: [[-1e9, 61], [165, 61], [178, 97]], zm: [[-1e9, 1], [165, 1], [180, 0.5]],
         });
       },
-      svpad: () => padScene({ pad: padSaturn, stk: saturnV(), rel: 0.3, a: 2.72, foot: -4, fires: { f1: [[-8.9, 0], [-6, 1]] }, arms: [-1, 4], focus: 55, chase: [105, 6, 200] }),
+      svpad: () => padScene({ pad: padSaturn, stk: saturnV(), rel: 0.3, a: 2.72, trailK: 1.1, foot: -4, fires: { f1: [[-8.9, 0], [-6, 1]] }, arms: [-1, 4], focus: 55, chase: [105, 6, 200] }),
       svasc() {
         const s = saturnV(), base = s.parts.csm.position.y;
         return ascentScene({
@@ -3443,7 +3519,7 @@ void main() {
           },
         });
       },
-      slspad: () => padScene({ pad: padSLS, stk: slsStack(), rel: 0, a: 4.44, foot: 0, fires: { rs25: [[-6.4, 0], [-5, 1]], srb: [[-0.2, 0], [0.2, 1]] }, focus: 50, chase: [100, 6, 185] }),
+      slspad: () => padScene({ pad: padSLS, stk: slsStack(), rel: 0, a: 4.44, trailK: 2, foot: 0, fires: { rs25: [[-6.4, 0], [-5, 1]], srb: [[-0.2, 0], [0.2, 1]] }, focus: 50, chase: [100, 6, 185] }),
       slsasc() {
         const s = slsStack();
         const panel = (i) => { const a = s.saj[i].userData.a; return [195, "saj" + i, { v: -0.6, a: -5, side: [Math.sin(a) * 4, Math.cos(a) * 4], spin: [Math.cos(a) * 0.5, 0, -Math.sin(a) * 0.5], pivot: 83.3, hide: 20 }]; };

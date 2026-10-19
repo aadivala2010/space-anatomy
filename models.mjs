@@ -7,8 +7,10 @@ export function makeModels(K) {
   const NS = THREE.NoColorSpace;
 
   // ---------------------------------------------------------------- kit
-  // a group sitting on a body of revolution at angle a, radius r, height y: local +z points out of the skin, +x along it
-  function skin(parent, a, r, y) { const g = new THREE.Group(); g.position.set(Math.sin(a) * r, y, Math.cos(a) * r); g.rotation.y = a; parent.add(g); return g; }
+  // a group sitting on a body of revolution at angle a, radius r, height y: local +z points out of the skin, +x along it.
+  // Yaw first, then pitch: rotation.x set later tilts it about its own +x (the skin's tangent), so a leg or fin
+  // swings out along its own azimuth and a window leans with the cone it sits on
+  function skin(parent, a, r, y) { const g = new THREE.Group(); g.position.set(Math.sin(a) * r, y, Math.cos(a) * r); g.rotation.order = "YXZ"; g.rotation.y = a; parent.add(g); return g; }
   // canvas texture cached for every scene; normal(...) turns a height drawing into a tangent-space normal map
   const ctex = (key, w, h, draw, o = {}) => once(key, () => { const t = tex(w, h, draw, o.repeat, o.srgb !== false); if (o.flip === false) t.flipY = false; return t; });
   function normal(key, w, h, draw, k = 2, repeat) {
@@ -202,8 +204,9 @@ export function makeModels(K) {
     const ENG = MERLIN9;
     const all9 = exhaust(root, { at: [0, 0, 0], re: 0.46, len: 60, kind: "kero", cluster: ENG, nozR: 0.46, glow: em.in });
     const fire = exhaust(root, { at: [0, 0, 0], re: 0.46, len: 26, kind: "kero", glow: em.in });
+    // the pads' undersides once the legs are down (the pad sits 0.32 m off the leg's back face, 0.07 m half-thick)
     return {
-      root, all9, fire, legFoot: 2.55 - 9.7 * Math.cos(55 * D2R) - 0.06,
+      root, all9, fire, legFoot: 2.55 + 9.7 * Math.cos(125 * D2R) - 0.32 * Math.sin(125 * D2R) - 0.07,
       legs: setLegs,
       fins: (k) => fins.forEach((p) => (p.rotation.x = k * 90 * D2R)),
     };

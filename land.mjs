@@ -126,7 +126,7 @@ function makeLand(list, stage, info) {
   stage.querySelector(".fx-flash").after(el);
   const capT = el.querySelector("b"), capE = el.querySelector("span"), capI = el.querySelector("em");
 
-  let THREE = null, X = null, loading = null, G = null, cur = null, lastS = null, hudv = null, dead = false, cutAt = 0, lastNow = 0;
+  let THREE = null, X = null, loading = null, G = null, cur = null, lastS = null, hudv = null, dead = false, cutAt = 0, lastNow = 0, waitT = null;
   // adaptive quality: the pixel ratio steps down while frames arrive slower than the display wants them, and creeps
   // back up when there is headroom; at the top it swaps the cheap FXAA for 4x MSAA, the first thing given up again
   // (ema = smoothed frame interval, min = the display's own interval, ms)
@@ -151,7 +151,8 @@ function makeLand(list, stage, info) {
   function load() {
     const U = "https://cdn.jsdelivr.net/npm/three@0.160.0/", J = U + "examples/jsm/postprocessing/";
     loading ||= Promise.all([U + "+esm", J + "EffectComposer.js/+esm", J + "RenderPass.js/+esm", J + "UnrealBloomPass.js/+esm", J + "OutputPass.js/+esm", J + "ShaderPass.js/+esm", J + "Pass.js/+esm", U + "examples/jsm/shaders/FXAAShader.js/+esm", U + "examples/jsm/utils/BufferGeometryUtils.js/+esm"].map((u) => import(u)))
-      .then(([T, ...adds]) => { THREE = T; X = Object.assign({}, ...adds); G = shared(); prebuild(); })
+      // a frame asked for while three.js was still loading gets drawn now (paused, nothing else would redraw it)
+      .then(([T, ...adds]) => { THREE = T; X = Object.assign({}, ...adds); G = shared(); prebuild(); if (waitT !== null) draw(waitT); })
       .catch((e) => { dead = true; console.warn("3-D views unavailable:", e); });
   }
   // build the scenes in the background, one at a time, so entering a window doesn't stall
@@ -187,11 +188,12 @@ void main() { gl_FragColor = texture2D(tFx, vUv); }`, depthTest: false, depthWri
       }
       setSize(w, h) { this.rt.setSize(Math.max(2, Math.round(w / 2)), Math.max(2, Math.round(h / 2))); fxU.uDRes.value.set(1 / this.rt.width, 1 / this.rt.height); }
       render(r, writeBuffer, readBuffer) {
-        const cc = r.getClearColor(new THREE.Color()), ca = r.getClearAlpha(), su = r.shadowMap.autoUpdate;
+        const cc = r.getClearColor(new THREE.Color()), ca = r.getClearAlpha(), su = r.shadowMap.autoUpdate, sc = pass.scene, bg = sc.background;
         fxU.uDepth.value = readBuffer.depthTexture; fxU.uLogF.value = Math.log2(camera.far + 1);
-        r.shadowMap.autoUpdate = false; camera.layers.set(2); r.setClearColor(0x000000, 0); r.setRenderTarget(this.rt); r.clear(true, false, false);
-        r.render(pass.scene, camera);
-        camera.layers.set(0); r.shadowMap.autoUpdate = su; r.setClearColor(cc, ca);
+        // the background ignores layers: left on, a starry sky would be painted opaque over the whole image
+        r.shadowMap.autoUpdate = false; camera.layers.set(2); sc.background = null; r.setClearColor(0x000000, 0); r.setRenderTarget(this.rt); r.clear(true, false, false);
+        r.render(sc, camera);
+        sc.background = bg; camera.layers.set(0); r.shadowMap.autoUpdate = su; r.setClearColor(cc, ca);
         const ac = r.autoClear; r.autoClear = false; // lay it over the image, don't wipe it
         this.quad.material.uniforms.tFx.value = this.rt.texture; r.setRenderTarget(readBuffer); this.quad.render(r); r.autoClear = ac;
       }
@@ -1847,6 +1849,7 @@ void main() {
   });
   el.addEventListener("pointerup", () => { drag = null; el.classList.remove("drag"); });
   el.addEventListener("wheel", (ev) => { ev.preventDefault(); ev.stopPropagation(); if (!cur?.R) return; const o = cur.R.orbit; o.dist = Math.min(4000, Math.max(4, o.dist * Math.exp(ev.deltaY * 0.0012))); render(); }, { passive: false });
+  window.__land = () => ({ cur, G, SC, THREE }); // for poking at the live view from the console
 
   return {
     // mission-clock speed while a scene is up (0 = not in a scene)
@@ -1854,34 +1857,36 @@ void main() {
     speedAt: (t) => { if (merging) return 0; const e = find(t); return e && !e.span && t - e.a0 <= e.m.dur ? e.m.speed : 0; },
     on: (t) => { const e = !dead && find(t); return !!e && !e.failed; },
     hud: () => hudv,
-    // call every flight frame with the mission clock; -Infinity hides it
-    draw(t) {
-      if (t > -Infinity) load();
-      const e = t > -Infinity && !dead ? find(t) : null;
-      if (e && THREE) ensure(e);
-      const vis = !!e && !e.failed;
-      if (el.hidden === vis) el.hidden = !vis;
-      if (!vis) { cur = null; lastS = null; hudv = null; return; }
-      if (!e.R) { cur = null; lastS = null; capT.textContent = "Loading 3-D view…"; capE.textContent = capI.textContent = ""; return; }
-      const now = performance.now(), rdt = lastNow ? Math.min(0.1, (now - lastNow) / 1000) : 0;
-      lastNow = now;
-      if (cur !== e) { cur = e; lastS = null; cutAt = now; }
-      const s = t - e.a0;
-      if (lastS !== null && s < lastS) e.R.reset();
-      // a seek jumps further than a frame can at this speed: don't let the particles see it as elapsed time
-      const fwd = lastS !== null && s > lastS, dt = fwd && s - lastS <= info.speed(t) * 0.25 ? s - lastS : 0;
-      if (fwd) G.rt += rdt;
-      G.clock.value = G.rt;
-      lastS = s;
-      // every cut is the same quick fade up from black, and only while playing (a paused seek shows the frame at once)
-      G.renderer.domElement.style.opacity = info.playing() ? Math.min(1, (now - cutAt) / 350).toFixed(3) : "1";
-      const ti = e.R.title ? e.R.title(s) || e.m.title : !e.span && s > e.m.dur && e.m.held ? e.m.held : e.m.title;
-      if (capT.textContent !== ti) capT.textContent = ti;
-      e.R.frame(s, dt);
-      render();
-      adapt(now);
-    },
+    draw,
   };
+  // call every flight frame with the mission clock; -Infinity hides it
+  function draw(t) {
+    if (t > -Infinity) load();
+    const e = t > -Infinity && !dead ? find(t) : null;
+    if (e && THREE) ensure(e);
+    const vis = !!e && !e.failed;
+    if (el.hidden === vis) el.hidden = !vis;
+    waitT = null;
+    if (!vis) { cur = null; lastS = null; hudv = null; return; }
+    if (!e.R) { cur = null; lastS = null; waitT = t; capT.textContent = "Loading 3-D view…"; capE.textContent = capI.textContent = ""; return; }
+    const now = performance.now(), rdt = lastNow ? Math.min(0.1, (now - lastNow) / 1000) : 0;
+    lastNow = now;
+    if (cur !== e) { cur = e; lastS = null; cutAt = now; }
+    const s = t - e.a0;
+    if (lastS !== null && s < lastS) e.R.reset();
+    // a seek jumps further than a frame can at this speed: don't let the particles see it as elapsed time
+    const fwd = lastS !== null && s > lastS, dt = fwd && s - lastS <= info.speed(t) * 0.25 ? s - lastS : 0;
+    if (fwd) G.rt += rdt;
+    G.clock.value = G.rt;
+    lastS = s;
+    // every cut is the same quick fade up from black, and only while playing (a paused seek shows the frame at once)
+    G.renderer.domElement.style.opacity = info.playing() ? Math.min(1, (now - cutAt) / 350).toFixed(3) : "1";
+    const ti = e.R.title ? e.R.title(s) || e.m.title : !e.span && s > e.m.dur && e.m.held ? e.m.held : e.m.title;
+    if (capT.textContent !== ti) capT.textContent = ti;
+    e.R.frame(s, dt);
+    render();
+    adapt(now);
+  }
 }
 
 export const LAND_RUNTIME = makeLand.toString() + ";\n" + MODELS_RUNTIME;

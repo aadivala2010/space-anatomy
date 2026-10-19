@@ -125,6 +125,24 @@ function makeLand(list, stage, info) {
   const capT = el.querySelector("b"), capE = el.querySelector("span"), capI = el.querySelector("em");
 
   let THREE = null, X = null, loading = null, G = null, cur = null, lastS = null, hudv = null, dead = false, cutAt = 0, lastNow = 0;
+  // adaptive resolution: the pixel ratio steps down while frames arrive slower than the display wants them, and creeps
+  // back up when there is headroom (ema = smoothed frame interval, min = the display's own interval, ms)
+  const DRS = { pr: 1, ema: 0, min: 1e9, last: 0, at: 0, hold: 0 };
+  function adapt(now) {
+    const dt = now - DRS.last;
+    DRS.last = now;
+    if (!info.playing() || document.hidden || dt <= 0 || dt > 250) return; // pauses, seeks and stalls say nothing about the GPU
+    DRS.min = Math.min(DRS.min * 1.001, Math.max(4, dt));
+    DRS.ema = DRS.ema ? DRS.ema + (dt - DRS.ema) * 0.08 : dt;
+    if (now - DRS.at < 1200) return;
+    const goal = Math.max(16.7, DRS.min), top = Math.min(devicePixelRatio, 2);
+    let pr = DRS.pr;
+    if (DRS.ema > goal * 1.3 && pr > 0.55) { pr = Math.max(0.55, pr * 0.84); DRS.hold = now + 20000; }
+    else if (DRS.ema < goal * 1.08 && pr < top && now > DRS.hold) pr = Math.min(top, pr * 1.12);
+    else return;
+    DRS.pr = pr; DRS.at = now; DRS.ema = 0;
+    G.renderer.setPixelRatio(pr); G.composer.setPixelRatio(pr); G.w = 0; // render() resizes the targets
+  }
   function load() {
     const U = "https://cdn.jsdelivr.net/npm/three@0.160.0/", J = U + "examples/jsm/postprocessing/";
     loading ||= Promise.all([U + "+esm", J + "EffectComposer.js/+esm", J + "RenderPass.js/+esm", J + "UnrealBloomPass.js/+esm", J + "OutputPass.js/+esm"].map((u) => import(u)))
@@ -140,17 +158,21 @@ function makeLand(list, stage, info) {
 
   // one renderer + bloom chain shared by every scene
   function shared() {
-    const renderer = new THREE.WebGLRenderer({ antialias: true, logarithmicDepthBuffer: true, powerPreference: "high-performance" });
-    renderer.setPixelRatio(Math.min(devicePixelRatio, 1.75));
+    const renderer = new THREE.WebGLRenderer({ antialias: false, logarithmicDepthBuffer: true, powerPreference: "high-performance" });
+    DRS.pr = Math.min(devicePixelRatio, 1.25);
+    renderer.setPixelRatio(DRS.pr);
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.shadowMap.type = THREE.PCFShadowMap;
     el.prepend(renderer.domElement);
     const camera = new THREE.PerspectiveCamera(42, 1, 0.3, 6e7);
     const composer = new X.EffectComposer(renderer, new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: 4 }));
     const pass = new X.RenderPass(new THREE.Scene(), camera);
     composer.addPass(pass);
-    composer.addPass(new X.UnrealBloomPass(new THREE.Vector2(256, 256), 0.45, 0.5, 1.25));
+    // bloom works from a half-size copy: a glow doesn't need full resolution and this is the costliest pass
+    const bloom = new X.UnrealBloomPass(new THREE.Vector2(256, 256), 0.45, 0.5, 1.25), bloomSize = bloom.setSize.bind(bloom);
+    bloom.setSize = (w, h) => bloomSize(Math.max(2, w >> 1), Math.max(2, h >> 1));
+    composer.addPass(bloom);
     composer.addPass(new X.OutputPass());
     const pmrem = new THREE.PMREMGenerator(renderer), loader = new THREE.TextureLoader(), cache = {};
     loader.setCrossOrigin("anonymous");
@@ -162,7 +184,8 @@ function makeLand(list, stage, info) {
       },
     };
   }
-  const R0 = () => { if (cur) render(); }; // redraw when a texture arrives
+  const R0 = () => { if (cur) render(); }; // redraw when a texture arrives or the stage resizes while paused
+  new ResizeObserver(R0).observe(el);
 
   function build(e) {
     const { camera, pmrem, once, img } = G;
@@ -1802,7 +1825,9 @@ void main() {
       const pitch = Math.min(1.45, orbit.pitch + (sc.lift ? sc.lift(ss) : 0)), cp = Math.cos(pitch);
       camera.position.set(target.x + d * cp * Math.sin(yaw), target.y + d * Math.sin(pitch), target.z + d * cp * Math.cos(yaw));
       if (sc.floor !== undefined) camera.position.y = Math.max(sc.floor, camera.position.y);
-      const j = G.shake * d * 0.006, jit = V3((Math.random() - 0.5) * j, (Math.random() - 0.5) * j, 0);
+      // shake: a smooth rumble on the wall clock (random jitter per frame reads as stutter)
+      const j = G.shake * d * 0.003, c = G.rt;
+      const jit = V3(j * (Math.sin(c * 31) + Math.sin(c * 19.3 + 1.7)), j * (Math.sin(c * 27.1 + 0.4) + Math.sin(c * 23.9 + 2.2)), 0);
       camera.position.add(jit);
       camera.lookAt(target.clone().add(jit));
       camera.updateMatrixWorld();
@@ -1867,6 +1892,7 @@ void main() {
       if (capT.textContent !== ti) capT.textContent = ti;
       e.R.frame(s, dt);
       render();
+      adapt(now);
     },
   };
 }

@@ -700,6 +700,8 @@ body[data-theme="light"] .cshadow{fill:#2a2c30}
   box-shadow:0 0 60px 18px #5aa7ff55}
 .stage:not([data-flight]) .earth{display:none}
 .stage>svg{position:relative;z-index:0}
+.stage[data-3d]>svg,.stage[data-3d]>.earth,.stage[data-3d]>.fx-gl{visibility:hidden}
+.stage[data-3d]::before,.stage[data-3d]::after{display:none}
 `;
 
 // ---------------------------------------------------------------- page
@@ -814,6 +816,8 @@ document.querySelectorAll("[data-row]").forEach((el) => (rows[el.dataset.row] = 
 const wingGroups = [...svg.querySelectorAll("[data-wings]")];
 const ease = (x) => (x <= 0 ? 0 : x >= 1 ? 1 : x * x * (3 - 2 * x));
 let e = 0, target = 0, frame = 0, last = 0;
+// true while the 3-D player covers the stage (set up by the flight code): the figure underneath is hidden and left alone
+let land3 = () => false;
 function shareOf(name, t) {
   const d = ASM[name].delay;
   return ease((t - d) / (1 - 0.45));
@@ -827,6 +831,7 @@ function setWing(f) {
 }
 function draw() {
   const fs = flight ? stateAt(missionT) : null;
+  if (fs && land3()) return applyFlightFx(fs);
   for (const name in byAsm) {
     let v = [0, 0, 0], rot = 0, piv = null, hide = false;
     if (fs) {
@@ -1127,6 +1132,7 @@ const LAND = typeof LANDINGS === "object" && HAS_MAP ? makeLand(LANDINGS, stage,
   speed: (t) => missionSpeed(t),
   playing: () => playing,
 }) : null;
+if (LAND) land3 = () => flight && LAND.on(missionT);
 if (HAS_MAP) { EVENTS.push(...MAP.events); EVENTS.sort((a, b) => a[0] - b[0]); }
 const KEY_T = EVENTS.map((e) => e[0]);
 // after the scene: fast through coasts, slow near every event
@@ -1212,6 +1218,9 @@ function applyFlightFx(fs) {
   if (HAS_MAP && t >= ISO_END) { const h = MM.hud(t); alt = h.alt; vel = h.vel; ref = h.ref === "moon" ? " above the Moon" : ""; }
   if (LAND) { LAND.draw(t); const lh = LAND.on(t) && LAND.hud(); if (lh) ({ alt, vel, ref } = lh); }
   drawMap();
+  const l3 = land3();
+  if (stage.hasAttribute("data-3d") !== l3) stage.toggleAttribute("data-3d", l3);
+  if (l3) return flightHud(t, alt, vel, ref);
   fs.ret ? stage.setAttribute("data-ret", "") : stage.removeAttribute("data-ret");
   if (fs.ret) retFx(fs);
   if (!fxOn) {
@@ -1246,7 +1255,9 @@ function applyFlightFx(fs) {
   earth.style.opacity = eo.toFixed(3);
   stage.style.setProperty("--earth-r", (900 - 520 * Math.sqrt(ek)).toFixed(0) + "vmax");
   stage.style.setProperty("--earth-y", (88 - 10 * Math.sqrt(ek)).toFixed(1) + "%");
-  // HUD
+  flightHud(t, alt, vel, ref);
+}
+function flightHud(t, alt, vel, ref) {
   const met = Math.abs(t), h = Math.floor(met / 3600), m = Math.floor((met % 3600) / 60), sec = Math.floor(met % 60);
   const hh = h < 1000 ? String(h).padStart(2, "0") : Math.floor(h / 24) + "d " + String(h % 24).padStart(2, "0");
   const label = "T" + (t < 0 ? "−" : "+") + hh + ":" + String(m).padStart(2, "0") + ":" + String(sec).padStart(2, "0");
@@ -1275,11 +1286,12 @@ function flightTick(now) {
   if (playing) { tau = Math.min(TOTAL, tau + dt); fxClock += still.matches ? 0 : dt; if (tau >= TOTAL) setPlaying(false); }
   missionT = tAt(tau);
   slider.value = String(Math.round((tau / TOTAL) * 1000));
-  shake = still.matches || (LAND && LAND.on(missionT)) ? [0, 0] : inRet(missionT) ? retShake() : missionT > ISO_END ? [0, 0] : shakeAt(missionT);
+  const l3 = land3();
+  shake = still.matches || l3 ? [0, 0] : inRet(missionT) ? retShake() : missionT > ISO_END ? [0, 0] : shakeAt(missionT);
   draw();
-  camFollow(dt, false);
-  if (!cam.follow) fxFrame();
-  flightFrame = flight && (playing || cam.follow) ? requestAnimationFrame(flightTick) : 0;
+  if (!l3) { camFollow(dt, false); if (!cam.follow) fxFrame(); }
+  // paused under the 3-D view nothing moves, so stop drawing (dragging the view redraws by itself)
+  flightFrame = flight && (playing || (cam.follow && !l3)) ? requestAnimationFrame(flightTick) : 0;
 }
 function runFlight() { if (!flightFrame) { flightLast = 0; flightFrame = requestAnimationFrame(flightTick); } }
 function setPlaying(on) {
@@ -1305,7 +1317,7 @@ function exitFlight() {
   flight = false; playing = false;
   if (flightFrame) cancelAnimationFrame(flightFrame);
   flightFrame = 0;
-  stage.removeAttribute("data-flight"); stage.removeAttribute("data-flow"); stage.removeAttribute("data-ret");
+  stage.removeAttribute("data-flight"); stage.removeAttribute("data-flow"); stage.removeAttribute("data-ret"); stage.removeAttribute("data-3d");
   hud.hidden = true; fbar.hidden = true;
   btn("launch").setAttribute("aria-pressed", "false");
   for (const p of plumes) p.el.style.display = "none";

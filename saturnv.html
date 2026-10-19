@@ -352,6 +352,8 @@ body[data-theme="light"] .cshadow{fill:#2a2c30}
   box-shadow:0 0 60px 18px #5aa7ff55}
 .stage:not([data-flight]) .earth{display:none}
 .stage>svg{position:relative;z-index:0}
+.stage[data-3d]>svg,.stage[data-3d]>.earth,.stage[data-3d]>.fx-gl{visibility:hidden}
+.stage[data-3d]::before,.stage[data-3d]::after{display:none}
 
 .mmap{position:absolute;right:12px;bottom:12px;width:min(36%,360px);aspect-ratio:4/3;z-index:2;border-radius:8px;overflow:hidden;box-shadow:0 0 0 1px #ffffff30,0 6px 24px #0009;cursor:zoom-in;background:#03050b}
 .mmap[hidden]{display:none}
@@ -1497,6 +1499,8 @@ document.querySelectorAll("[data-row]").forEach((el) => (rows[el.dataset.row] = 
 const wingGroups = [...svg.querySelectorAll("[data-wings]")];
 const ease = (x) => (x <= 0 ? 0 : x >= 1 ? 1 : x * x * (3 - 2 * x));
 let e = 0, target = 0, frame = 0, last = 0;
+// true while the 3-D player covers the stage (set up by the flight code): the figure underneath is hidden and left alone
+let land3 = () => false;
 function shareOf(name, t) {
   const d = ASM[name].delay;
   return ease((t - d) / (1 - 0.45));
@@ -1510,6 +1514,7 @@ function setWing(f) {
 }
 function draw() {
   const fs = flight ? stateAt(missionT) : null;
+  if (fs && land3()) return applyFlightFx(fs);
   for (const name in byAsm) {
     let v = [0, 0, 0], rot = 0, piv = null, hide = false;
     if (fs) {
@@ -2291,6 +2296,24 @@ function makeLand(list, stage, info) {
   const capT = el.querySelector("b"), capE = el.querySelector("span"), capI = el.querySelector("em");
 
   let THREE = null, X = null, loading = null, G = null, cur = null, lastS = null, hudv = null, dead = false, cutAt = 0, lastNow = 0;
+  // adaptive resolution: the pixel ratio steps down while frames arrive slower than the display wants them, and creeps
+  // back up when there is headroom (ema = smoothed frame interval, min = the display's own interval, ms)
+  const DRS = { pr: 1, ema: 0, min: 1e9, last: 0, at: 0, hold: 0 };
+  function adapt(now) {
+    const dt = now - DRS.last;
+    DRS.last = now;
+    if (!info.playing() || document.hidden || dt <= 0 || dt > 250) return; // pauses, seeks and stalls say nothing about the GPU
+    DRS.min = Math.min(DRS.min * 1.001, Math.max(4, dt));
+    DRS.ema = DRS.ema ? DRS.ema + (dt - DRS.ema) * 0.08 : dt;
+    if (now - DRS.at < 1200) return;
+    const goal = Math.max(16.7, DRS.min), top = Math.min(devicePixelRatio, 2);
+    let pr = DRS.pr;
+    if (DRS.ema > goal * 1.3 && pr > 0.55) { pr = Math.max(0.55, pr * 0.84); DRS.hold = now + 20000; }
+    else if (DRS.ema < goal * 1.08 && pr < top && now > DRS.hold) pr = Math.min(top, pr * 1.12);
+    else return;
+    DRS.pr = pr; DRS.at = now; DRS.ema = 0;
+    G.renderer.setPixelRatio(pr); G.composer.setPixelRatio(pr); G.w = 0; // render() resizes the targets
+  }
   function load() {
     const U = "https://cdn.jsdelivr.net/npm/three@0.160.0/", J = U + "examples/jsm/postprocessing/";
     loading ||= Promise.all([U + "+esm", J + "EffectComposer.js/+esm", J + "RenderPass.js/+esm", J + "UnrealBloomPass.js/+esm", J + "OutputPass.js/+esm"].map((u) => import(u)))
@@ -2306,17 +2329,21 @@ function makeLand(list, stage, info) {
 
   // one renderer + bloom chain shared by every scene
   function shared() {
-    const renderer = new THREE.WebGLRenderer({ antialias: true, logarithmicDepthBuffer: true, powerPreference: "high-performance" });
-    renderer.setPixelRatio(Math.min(devicePixelRatio, 1.75));
+    const renderer = new THREE.WebGLRenderer({ antialias: false, logarithmicDepthBuffer: true, powerPreference: "high-performance" });
+    DRS.pr = Math.min(devicePixelRatio, 1.25);
+    renderer.setPixelRatio(DRS.pr);
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.shadowMap.type = THREE.PCFShadowMap;
     el.prepend(renderer.domElement);
     const camera = new THREE.PerspectiveCamera(42, 1, 0.3, 6e7);
     const composer = new X.EffectComposer(renderer, new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: 4 }));
     const pass = new X.RenderPass(new THREE.Scene(), camera);
     composer.addPass(pass);
-    composer.addPass(new X.UnrealBloomPass(new THREE.Vector2(256, 256), 0.45, 0.5, 1.25));
+    // bloom works from a half-size copy: a glow doesn't need full resolution and this is the costliest pass
+    const bloom = new X.UnrealBloomPass(new THREE.Vector2(256, 256), 0.45, 0.5, 1.25), bloomSize = bloom.setSize.bind(bloom);
+    bloom.setSize = (w, h) => bloomSize(Math.max(2, w >> 1), Math.max(2, h >> 1));
+    composer.addPass(bloom);
     composer.addPass(new X.OutputPass());
     const pmrem = new THREE.PMREMGenerator(renderer), loader = new THREE.TextureLoader(), cache = {};
     loader.setCrossOrigin("anonymous");
@@ -2328,7 +2355,8 @@ function makeLand(list, stage, info) {
       },
     };
   }
-  const R0 = () => { if (cur) render(); }; // redraw when a texture arrives
+  const R0 = () => { if (cur) render(); }; // redraw when a texture arrives or the stage resizes while paused
+  new ResizeObserver(R0).observe(el);
 
   function build(e) {
     const { camera, pmrem, once, img } = G;
@@ -3968,7 +3996,9 @@ void main() {
       const pitch = Math.min(1.45, orbit.pitch + (sc.lift ? sc.lift(ss) : 0)), cp = Math.cos(pitch);
       camera.position.set(target.x + d * cp * Math.sin(yaw), target.y + d * Math.sin(pitch), target.z + d * cp * Math.cos(yaw));
       if (sc.floor !== undefined) camera.position.y = Math.max(sc.floor, camera.position.y);
-      const j = G.shake * d * 0.006, jit = V3((Math.random() - 0.5) * j, (Math.random() - 0.5) * j, 0);
+      // shake: a smooth rumble on the wall clock (random jitter per frame reads as stutter)
+      const j = G.shake * d * 0.003, c = G.rt;
+      const jit = V3(j * (Math.sin(c * 31) + Math.sin(c * 19.3 + 1.7)), j * (Math.sin(c * 27.1 + 0.4) + Math.sin(c * 23.9 + 2.2)), 0);
       camera.position.add(jit);
       camera.lookAt(target.clone().add(jit));
       camera.updateMatrixWorld();
@@ -4033,6 +4063,7 @@ void main() {
       if (capT.textContent !== ti) capT.textContent = ti;
       e.R.frame(s, dt);
       render();
+      adapt(now);
     },
   };
 }
@@ -4247,6 +4278,7 @@ const LAND = typeof LANDINGS === "object" && HAS_MAP ? makeLand(LANDINGS, stage,
   speed: (t) => missionSpeed(t),
   playing: () => playing,
 }) : null;
+if (LAND) land3 = () => flight && LAND.on(missionT);
 if (HAS_MAP) { EVENTS.push(...MAP.events); EVENTS.sort((a, b) => a[0] - b[0]); }
 const KEY_T = EVENTS.map((e) => e[0]);
 // after the scene: fast through coasts, slow near every event
@@ -4332,6 +4364,9 @@ function applyFlightFx(fs) {
   if (HAS_MAP && t >= ISO_END) { const h = MM.hud(t); alt = h.alt; vel = h.vel; ref = h.ref === "moon" ? " above the Moon" : ""; }
   if (LAND) { LAND.draw(t); const lh = LAND.on(t) && LAND.hud(); if (lh) ({ alt, vel, ref } = lh); }
   drawMap();
+  const l3 = land3();
+  if (stage.hasAttribute("data-3d") !== l3) stage.toggleAttribute("data-3d", l3);
+  if (l3) return flightHud(t, alt, vel, ref);
   fs.ret ? stage.setAttribute("data-ret", "") : stage.removeAttribute("data-ret");
   if (fs.ret) retFx(fs);
   if (!fxOn) {
@@ -4366,7 +4401,9 @@ function applyFlightFx(fs) {
   earth.style.opacity = eo.toFixed(3);
   stage.style.setProperty("--earth-r", (900 - 520 * Math.sqrt(ek)).toFixed(0) + "vmax");
   stage.style.setProperty("--earth-y", (88 - 10 * Math.sqrt(ek)).toFixed(1) + "%");
-  // HUD
+  flightHud(t, alt, vel, ref);
+}
+function flightHud(t, alt, vel, ref) {
   const met = Math.abs(t), h = Math.floor(met / 3600), m = Math.floor((met % 3600) / 60), sec = Math.floor(met % 60);
   const hh = h < 1000 ? String(h).padStart(2, "0") : Math.floor(h / 24) + "d " + String(h % 24).padStart(2, "0");
   const label = "T" + (t < 0 ? "−" : "+") + hh + ":" + String(m).padStart(2, "0") + ":" + String(sec).padStart(2, "0");
@@ -4395,11 +4432,12 @@ function flightTick(now) {
   if (playing) { tau = Math.min(TOTAL, tau + dt); fxClock += still.matches ? 0 : dt; if (tau >= TOTAL) setPlaying(false); }
   missionT = tAt(tau);
   slider.value = String(Math.round((tau / TOTAL) * 1000));
-  shake = still.matches || (LAND && LAND.on(missionT)) ? [0, 0] : inRet(missionT) ? retShake() : missionT > ISO_END ? [0, 0] : shakeAt(missionT);
+  const l3 = land3();
+  shake = still.matches || l3 ? [0, 0] : inRet(missionT) ? retShake() : missionT > ISO_END ? [0, 0] : shakeAt(missionT);
   draw();
-  camFollow(dt, false);
-  if (!cam.follow) fxFrame();
-  flightFrame = flight && (playing || cam.follow) ? requestAnimationFrame(flightTick) : 0;
+  if (!l3) { camFollow(dt, false); if (!cam.follow) fxFrame(); }
+  // paused under the 3-D view nothing moves, so stop drawing (dragging the view redraws by itself)
+  flightFrame = flight && (playing || (cam.follow && !l3)) ? requestAnimationFrame(flightTick) : 0;
 }
 function runFlight() { if (!flightFrame) { flightLast = 0; flightFrame = requestAnimationFrame(flightTick); } }
 function setPlaying(on) {
@@ -4425,7 +4463,7 @@ function exitFlight() {
   flight = false; playing = false;
   if (flightFrame) cancelAnimationFrame(flightFrame);
   flightFrame = 0;
-  stage.removeAttribute("data-flight"); stage.removeAttribute("data-flow"); stage.removeAttribute("data-ret");
+  stage.removeAttribute("data-flight"); stage.removeAttribute("data-flow"); stage.removeAttribute("data-ret"); stage.removeAttribute("data-3d");
   hud.hidden = true; fbar.hidden = true;
   btn("launch").setAttribute("aria-pressed", "false");
   for (const p of plumes) p.el.style.display = "none";

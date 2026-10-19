@@ -2278,7 +2278,20 @@ function makeLand(list, stage, info) {
     for (const [a, b] of SC.map((x) => [x.a0, x.a1]).sort((p, q) => p[0] - q[0])) { if (a > t + 1e-6) SC.push({ id: "coast", c: free, m: META.coast, span: true, a0: t, a1: a, R: null }); t = Math.max(t, b); }
     if (t < info.end) SC.push({ id: "coast", c: free, m: META.coast, span: true, a0: t, a1: info.end, R: null });
   }
-  const find = (t) => SC.find((e) => t >= e.a0 && t <= e.a1);
+  // a free-flight gap the viewer would see for under ~10 s goes to the shot before it, so cuts don't come in bursts
+  // (done on first use: the player's clock speed isn't known while makeLand runs)
+  let merged = false, merging = false;
+  function merge() {
+    merged = merging = true;
+    for (const g of SC.filter((x) => x.id === "coast")) {
+      let wall = 0;
+      for (let i = 0, n = 200, d = (g.a1 - g.a0) / n; i < n; i++) wall += d / Math.max(1e-3, info.speed(g.a0 + (i + 0.5) * d));
+      const p = wall < 10 && SC.filter((x) => x !== g && Math.abs(x.a1 - g.a0) < 1e-6).sort((a, b) => a.span - b.span)[0];
+      if (p) { p.a1 = g.a1; SC.splice(SC.indexOf(g), 1); }
+    }
+    merging = false;
+  }
+  const find = (t) => { if (!merged) merge(); return SC.find((e) => t >= e.a0 && t <= e.a1); };
 
   // ---- overlay (one for all scenes)
   const el = document.createElement("div");
@@ -2387,7 +2400,27 @@ function makeLand(list, stage, info) {
     // exhaust: an additive glowing tube that is brightest at the nozzle, plus a nozzle glow; returned setter takes power 0..1
     function plume(parent, x, y, z, r, len, color, { spread = 1.6, opacity = 1, k = 3.5, halo = 6 } = {}) {
       const g = new THREE.Group(); g.position.set(x, y, z); parent.add(g);
-      const mk = (rt, rb, c, kk, o, sy) => { const m = new THREE.Mesh(new THREE.CylinderGeometry(rt, rb, 1, 24, 1, true).translate(0, -0.5, 0), glow(c, kk, { map: plumeTex, opacity: o })); m.scale.y = sy; g.add(m); };
+      // soft gas, not a tube: bright where you look through the middle, fading to nothing at the silhouette and down the length
+      const mat = (c, kk, o) => new THREE.ShaderMaterial({
+        uniforms: { uC: { value: new THREE.Color(c).multiplyScalar(kk) }, uO: { value: o } },
+        transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
+        vertexShader: `#include <common>
+#include <logdepthbuf_pars_vertex>
+varying vec3 vN, vV; varying float vY;
+void main() { vec4 mv = modelViewMatrix * vec4(position, 1.0); vec3 n = normalMatrix * normal; vN = length(n) > 1e-6 ? normalize(n) : vec3(0.0, 0.0, 1.0); vV = normalize(-mv.xyz); vY = uv.y;
+gl_Position = projectionMatrix * mv;
+#include <logdepthbuf_vertex>
+}`,
+        fragmentShader: `#include <common>
+#include <logdepthbuf_pars_fragment>
+uniform vec3 uC; uniform float uO; varying vec3 vN, vV; varying float vY;
+void main() {
+#include <logdepthbuf_fragment>
+  float edge = pow(abs(dot(vN, vV)), 2.0), along = vY * vY * (0.4 + 0.6 * vY);
+  gl_FragColor = vec4(uC * edge * along * uO * 0.5, 1.0);
+}`,
+      });
+      const mk = (rt, rb, c, kk, o, sy) => { const m = new THREE.Mesh(new THREE.CylinderGeometry(rt, rb, 1, 24, 1, true).translate(0, -0.5, 0), mat(c, kk, o)); m.scale.y = sy; g.add(m); };
       mk(r, r * spread, color, k * 0.6, 0.6 * opacity, 1);
       mk(r * 0.6, r * 0.3, "#fff6e6", k, 0.9 * opacity, 0.4);
       const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: dotTex, color: new THREE.Color(color).multiplyScalar(k), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity: 0.7 * opacity }));
@@ -2950,7 +2983,7 @@ void main() {
       const sand = mesh(new THREE.PlaneGeometry(100000, 50000).rotateX(-Math.PI / 2), std("#c8b48e", { roughness: 1 }), world, 0, 0, -24300);
       sand.castShadow = false;
       const o = ocean(2000, 60); // sea to the east
-      world.children.slice(-2).forEach((m) => (m.position.z += 26000));
+      const [near, far] = world.children.slice(-2); near.position.z = 26000; far.position.z = 200700;
       box(110, 0.4, 110, std("#a9abad", { roughness: 0.9 }), world, 0, 0.2, -10);
       const grey = std("#5d6268", { roughness: 0.5, metalness: 0.4 });
       mesh(new THREE.CylinderGeometry(9.5, 9.5, 3, 40), grey, world, 0, 19.5, 0); // orbital launch mount
@@ -3250,9 +3283,9 @@ void main() {
       return (k, sd = 1) => (pv.rotation.y = sd * k * 1.35);
     }
     function ground({ sea = true, hard = 14 } = {}) {
-      const grass = mesh(new THREE.PlaneGeometry(120000, 120000).rotateX(-Math.PI / 2), std("#ffffff", { map: once("grass", () => tex(512, 512, (g, w, hh) => { g.fillStyle = "#4f6334"; g.fillRect(0, 0, w, hh); const r = rng(41); for (let i = 0; i < 9000; i++) { const c = r(); g.fillStyle = c < 0.5 ? "rgba(40,60,25,.4)" : "rgba(120,130,80,.25)"; g.fillRect(r() * w, r() * hh, 2 + 8 * r(), 2 + 8 * r()); } }, [300, 300])), roughness: 1 }), world, 0, 0, 0);
+      const grass = mesh(new THREE.PlaneGeometry(63000, 120000).translate(-28500, 0, 0).rotateX(-Math.PI / 2), std("#ffffff", { map: once("grass", () => tex(512, 512, (g, w, hh) => { g.fillStyle = "#4f6334"; g.fillRect(0, 0, w, hh); const r = rng(41); for (let i = 0; i < 9000; i++) { const c = r(); g.fillStyle = c < 0.5 ? "rgba(40,60,25,.4)" : "rgba(120,130,80,.25)"; g.fillRect(r() * w, r() * hh, 2 + 8 * r(), 2 + 8 * r()); } }, [300, 300])), roughness: 1 }), world, 0, 0, 0);
       grass.castShadow = false;
-      if (sea) { ocean(3000, 40); world.children.slice(-2).forEach((m) => { m.position.x += 4500; m.position.y += 0.3; }); }
+      if (sea) { ocean(3000, 40); const [near, far] = world.children.slice(-2); near.position.set(4500, 0.3, 0); far.position.set(203000, -0.3, 0); }
       // the raised hardstand, its ramp and the flame trench
       const con = std("#ffffff", { map: once("conc", () => tex(256, 256, (g, w, hh) => { g.fillStyle = "#b9b6ae"; g.fillRect(0, 0, w, hh); const r = rng(43); for (let i = 0; i < 2000; i++) { g.fillStyle = `rgba(0,0,0,${0.06 * r()})`; g.fillRect(r() * w, r() * hh, 3 + 9 * r(), 3 + 9 * r()); } g.strokeStyle = "rgba(0,0,0,.15)"; g.strokeRect(0, 0, w, hh); }, [20, 20])), roughness: 0.95 });
       const hill = mesh(new THREE.CylinderGeometry(85, 125, hard, 4, 1).rotateY(Math.PI / 4), con, world, 0, hard / 2, 0); hill.castShadow = false;
@@ -3443,15 +3476,21 @@ void main() {
       const nameAt = (t) => { let n = cfg.craft[0][1]; for (const [ta, x] of cfg.craft) if (t >= ta) n = x; return n; };
       const [nc, Dm, lm, col] = cfg.chutes || [3, 30, 32, "#d8442c"];
       const drogue = chutes(2, 6, lm * 0.75, col), mains = chutes(nc, Dm, lm, col);
+      // capsules glow through entry: heat shield into the flow (+x) as the "retro" pose holds it
+      const flow = new THREE.Group(); flow.rotation.z = Math.PI / 2; world.add(flow);
+      for (const m of Object.values(models)) if (m.hot) { m.hold.rotation.set(0, 0, Math.PI / 2); m.hold.updateMatrixWorld(true); m.glow = plasma(m.hold.children[0], flow, m.R, m.plen, m.hot); m.glow(0, 0); }
       const q = new THREE.Quaternion(), pos = V3();
       let c = 0, cur0 = null, roll = 0, lastT = null, kc = 0; // kc: how far the camera backs off for parachutes
       const m0 = models[nameAt(e.a0)] || Object.values(models)[0], L0 = m0.len * 2.4 + 10;
+      // attitude, zoom and framing ease toward their targets on the wall clock (snap when paused or on the first frame)
+      let ang = null, zS = 1, fS = 0, lastW = null;
       return {
         chase: [-0.55 * L0, 0.3 * L0, 0.78 * L0], shadow: 60, sunDir, space: true, pmin: -1.4, spin: 0.02,
         title: (s) => (models[nameAt(e.a0 + s)] || m0).title,
         events: [],
-        focus: (s) => kc * (((models[nameAt(e.a0 + s)] || m0).top || 0) + lm * 0.35),
-        zoom: (s) => { const m = models[nameAt(e.a0 + s)] || m0; return ((m.len * 2.4 + 10) / L0) * (1 + 2.6 * kc); },
+        focus: () => fS,
+        zoom: () => zS,
+        reset() { lastW = null; },
         place(s) {
           const t = e.a0 + s, h = info.hud(t), fx = info.fx(t), pose = info.pose(t);
           const onMoon = h.ref === "moon";
@@ -3461,14 +3500,20 @@ void main() {
           lastT = t; pr.roll(roll);
           sky(onMoon ? 1000 : h.alt, !onMoon);
           const n = nameAt(t), m = models[n] || m0;
-          if (cur0 !== m) { for (const k in models) models[k].hold.visible = models[k] === m; cur0 = m; }
-          const ang = m.fixed ? 0 : pose === "retro" ? Math.PI / 2 : pose === "up" ? 0 : pose === "belly" ? -Math.PI / 2 : -Math.PI / 2;
+          if (cur0 !== m) { for (const k in models) { models[k].hold.visible = models[k] === m; if (models[k] !== m && models[k].glow) models[k].glow(0, c); } cur0 = m; }
+          const now = performance.now(), k = lastW === null || !info.playing() ? 1 : 1 - Math.exp(-Math.min(0.2, (now - lastW) / 1000) * 1.6);
+          lastW = now;
+          const angT = m.fixed ? 0 : pose === "retro" ? Math.PI / 2 : pose === "up" ? 0 : -Math.PI / 2;
+          ang = ang === null || k === 1 ? angT : ang + (angT - ang) * k;
           m.hold.rotation.set(0, 0, ang);
+          if (m.glow) m.glow(entryGlow(s, []), c);
           const burn = fx.includes("burn") ? 1 : 0;
           if (m.fire) m.fire(burn, 1 + (h.alt > 100 ? 1.5 : 0), 1);
           if (m.rcs) m.rcs(burn ? 0.4 : 0.03);
           const k1 = fx.includes("chute1") ? 1 : 0, k2 = fx.includes("chute2") ? 1 : 0;
           kc = m.top === undefined ? 0 : Math.max(k1 * 0.4, k2);
+          const zT = ((m.len * 2.4 + 10) / L0) * (1 + 2.6 * kc), fT = kc * ((m.top || 0) + lm * 0.35);
+          zS = k === 1 ? zT : zS + (zT - zS) * k; fS = k === 1 ? fT : fS + (fT - fS) * k;
           q.setFromEuler(m.hold.rotation);
           for (const [ch, on] of [[drogue, k1], [mains, k2 && !k1 ? 1 : 0]]) {
             ch.g.visible = on > 0 && m.top !== undefined;
@@ -3483,7 +3528,7 @@ void main() {
     function craftModel(n) {
       const hold = new THREE.Group(), add = (v, mid, len, o = {}) => { v.root.position.y = -mid; hold.add(v.root); return Object.assign({ hold, mid, len }, o); };
       if (n === "dragon") { const d = crewDragon(); d.setNose(1); return add(d, 0.4, 8, { rcs: d.dracos, title: "Crew Dragon · free flight" }); }
-      if (n === "capsule") { const d = crewDragon({ trunk: false }); return add(d, 1.6, 5, { rcs: d.dracos, top: 3.4, title: "Crew Dragon · coming home" }); }
+      if (n === "capsule") { const d = crewDragon({ trunk: false }); return add(d, 1.6, 5, { rcs: d.dracos, top: 3.4, R: 2.0, hot: "#ff7a32", plen: 26, title: "Crew Dragon · coming home" }); }
       if (n === "dragonIss") {
         const st = iss(), d = crewDragon(), g = new THREE.Group(); g.add(st.root, dockAt(d, 3.47)); st.wings.forEach((w) => (w.rotation.x = 0.55));
         const m = add({ root: g }, 0, 70, { fixed: true, title: "Docked to the International Space Station" }); g.position.x = -18; return m;
@@ -3498,9 +3543,9 @@ void main() {
       if (n === "csm") { const v = apolloCSM(); const sps = plume(v.root, 0, -7.0, 0, 1.2, 18, "#ffe0b8", { spread: 3, opacity: 0.3 }); return add(v, -1.9, 11, { fire: sps, rcs: v.rcs, title: "Columbia · command and service module" }); }
       if (n === "lm") { const v = lunarModule(); return add(v, 3.4, 8, { fire: v.fire, rcs: v.rcs, title: "Eagle · lunar module" }); }
       if (n === "lmasc") { const v = lunarModule(); v.desc.visible = false; return add(v, 4.6, 5, { fire: v.afire, rcs: v.rcs, title: "Eagle · ascent stage" }); }
-      if (n === "apolloCm") { const v = apolloCM(); return add(v, 1.4, 4.5, { top: v.top, title: "Columbia · command module" }); }
+      if (n === "apolloCm") { const v = apolloCM(); return add(v, 1.4, 4.5, { top: v.top, R: v.R, hot: "#ff6a26", plen: 22, title: "Columbia · command module" }); }
       if (n === "orion") { const v = orionStack(); return add(v, -1.8, 12, { fire: v.fire, rcs: v.rcs, title: "Orion · crew and service modules" }); }
-      if (n === "orionCm") { const v = orionCM(); return add(v, 1.5, 5.5, { top: v.top, title: "Orion · crew module" }); }
+      if (n === "orionCm") { const v = orionCM(); return add(v, 1.5, 5.5, { top: v.top, R: v.R, hot: "#ff6a2a", plen: 28, title: "Orion · crew module" }); }
       throw new Error("no model " + n);
     }
     const rangeInfo = (s) => (s.x < -0.01 ? `Range ${(-s.x).toFixed(1)} m · closing ${(s.vx * 100).toFixed(0)} cm/s` : "");
@@ -3971,7 +4016,7 @@ void main() {
   return {
     // mission-clock speed while a scene is up (0 = not in a scene)
     // set pieces run at their own pace for their scripted length; long shots and held set pieces keep the mission's warp
-    speedAt: (t) => { const e = find(t); return e && !e.span && t - e.a0 <= e.m.dur ? e.m.speed : 0; },
+    speedAt: (t) => { if (merging) return 0; const e = find(t); return e && !e.span && t - e.a0 <= e.m.dur ? e.m.speed : 0; },
     on: (t) => { const e = !dead && find(t); return !!e && !e.failed; },
     hud: () => hudv,
     // call every flight frame with the mission clock; -Infinity hides it

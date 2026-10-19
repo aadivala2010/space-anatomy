@@ -1308,7 +1308,7 @@ const MAP = (() => {
     // 3-D: liftoff, ascent to high Earth orbit, ICPS separation, far-side flyby, skip entry, splashdown; free flight in between
     land: [
       { id: "slspad", from: -8, to: 30 }, { id: "slsasc", from: 30, to: 12250 }, { id: "osep", at: 12255 }, { id: "flyby", at: tFB },
-      { id: "oentry", from: tEI, to: tEI + 900 }, { id: "osplash", at: tSplash, to: END },
+      { id: "osplash", at: tSplash, to: END },
       { id: "coast", craft: [[-1e9, "orion"], [tEI - 1200, "orionCm"]], chutes: [3, 35, 40, "#e2672a"] },
     ],
     marks: [{ b: "earth", a: site0, kind: "pad", name: "LC-39B", to: 30000 }, { b: "earth", a: aSplash + 0.0006, kind: "boat", name: "Recovery ship", from: tEI - 30000 }],

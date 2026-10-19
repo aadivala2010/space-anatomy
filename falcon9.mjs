@@ -596,7 +596,7 @@ const MAP = (() => {
     // 3-D: liftoff, ascent, booster landing, ISS docking, entry, splashdown; free flight in between
     land: [
       { id: "f9pad", from: -6, to: 30 }, { id: "f9asc", from: 30, to: 760 }, { id: "f9", at: 541 }, { id: "dock", at: tDock },
-      { id: "dentry", from: tD + 2100, to: tD + 2620 }, { id: "dsplash", at: tSplash, to: END },
+      { id: "dsplash", at: tSplash, to: END },
       { id: "coast", craft: [[-1e9, "dragon"], [tDock, "dragonIss"], [tUndock, "dragon"], [tD - 600, "capsule"]], chutes: [4, 35, 38, "#d8442c"] },
     ],
     marks: [{ b: "earth", a: site0, kind: "pad", name: "LC-39A", to: 3000 }, { b: "earth", a: ship, kind: "droneship", name: "Droneship", to: 3000 }, { b: "earth", a: d + 2.7436, kind: "boat", name: "Recovery ship", from: tD }],

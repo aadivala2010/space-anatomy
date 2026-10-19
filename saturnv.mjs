@@ -553,7 +553,7 @@ const MISSION = String.raw`
 // lunar liftoff, docking in lunar orbit, entry, splashdown; free flight in between
 const LANDINGS = [
   { id: "svpad", from: -9, to: 30 }, { id: "svasc", from: 30, to: 15308 }, { id: "td", at: 15420 }, { id: "lm", at: 369940, to: 447717 },
-  { id: "lmasc", at: 447720 }, { id: "lmdock", at: 460980 }, { id: "aentry", from: 702186, to: 702186 + 394 }, { id: "asplash", at: 703115, to: 703115 + 2400 },
+  { id: "lmasc", at: 447720 }, { id: "lmdock", at: 460980 }, { id: "asplash", at: 703115, to: 703115 + 2400 },
   { id: "coast", craft: [[-1e9, "csmlm"], [360720, "lm"], [447720, "lmasc"], [460980, "csmasc"], [468600, "csm"], [701340, "apolloCm"]], chutes: [3, 25.4, 30, "#d33a2c"] },
 ];
 // ---- Apollo 11, 16 July 1969, time-warped

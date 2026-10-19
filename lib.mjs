@@ -700,7 +700,7 @@ body[data-theme="light"] .cshadow{fill:#2a2c30}
   box-shadow:0 0 60px 18px #5aa7ff55}
 .stage:not([data-flight]) .earth{display:none}
 .stage>svg{position:relative;z-index:0}
-.stage[data-3d]>svg,.stage[data-3d]>.earth,.stage[data-3d]>.fx-gl{visibility:hidden}
+.stage[data-3d]>svg,.stage[data-3d]>.earth,.stage[data-3d]>.fx-gl{display:none}
 .stage[data-3d]::before,.stage[data-3d]::after{display:none}
 `;
 

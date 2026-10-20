@@ -63,8 +63,8 @@ function makeLand(list, stage, info) {
   const tLM = firstBelow(M.lm, 1.7); // contact probes touch
   // the booster landings, the only cuts: touch = the scene time lined up with the entry's `at`; they play in real time
   const META = {
-    f9: { touch: 17.2, dur: 22, speed: 1, title: "Booster landing · droneship" },
-    sh: { touch: 30.8, dur: 36, speed: 1, title: "Booster catch · Starbase tower" },
+    f9: { touch: 17.2, dur: 22, speed: 1, hud: 1, title: "Booster landing · droneship" },
+    sh: { touch: 30.8, dur: 36, speed: 1, hud: 1, title: "Booster catch · Starbase tower" },
   };
   const SC = [];
   let FL = null;
@@ -86,7 +86,7 @@ function makeLand(list, stage, info) {
 
   // ---- where the craft is drawn, sampled every 1/60 s of playback exactly as the player steps its clock, so a frame is the
   // same played or scrubbed: the mission time, the body it is nearest (0 Earth, 1 Moon) and its angle round that body on the
-  // mission map. That angle may turn no faster than once in ~25 s of playback, so a low orbit at a huge warp rolls the globe
+  // mission map. Near the body that angle may turn no faster than once in ~25 s of playback, so a low orbit at a huge warp rolls the globe
   // by steadily instead of strobing; it catches up with the map once the warp drops. For the first minutes the downrange
   // distance comes from the speed and pitch profile (the map's ascent rows are coarse near the ground).
   const pitchAt = (alt) => (Math.PI / 2) * (1 - Math.exp(-alt / 42));
@@ -108,7 +108,12 @@ function makeLand(list, stage, info) {
         a = ax + wrap(a - ax) * sm(100, 200, t);
       }
       if (pm !== pr) { av = a; pr = pm; }
-      else { const da = wrap(a - last); av += Math.abs(da) <= CAP ? da + Math.max(-FIX, Math.min(FIX, wrap(a - av))) : Math.sign(da) * CAP; }
+      // far from the body (its ground a blur) the drawn angle simply follows the map
+      else if (Math.hypot(w.p[0] - c[0], w.p[1] - c[1]) > (pm ? 1737 : 6378) + 5000) av = a + TAU * Math.round((av - a) / TAU);
+      else { // any lag is made up quickly while high (the ground a blur), gently once low
+        const da = wrap(a - last), up = Math.hypot(w.p[0] - c[0], w.p[1] - c[1]) - (pm ? 1737 : 6378), fx = FIX * (1 + 12 * Math.min(1, Math.max(0, (up - 150) / 800)));
+        av += Math.abs(da) <= CAP ? da + Math.max(-fx, Math.min(fx, wrap(a - av))) : Math.sign(da) * CAP + Math.max(-fx, Math.min(fx, wrap(a - av))) * Math.min(1, Math.max(0, (up - 150) / 800));
+      }
       last = a;
       T.push(t); A.push(av); P.push(pm);
       if (t >= info.end) break;
@@ -165,7 +170,7 @@ function makeLand(list, stage, info) {
       .catch((e) => { dead = true; console.warn("3-D views unavailable:", e); });
   }
   // build the scenes in the background, one at a time, so entering a window doesn't stall
-  function prebuild() { const next = () => { const e = SC.slice().sort((a, b) => a.a0 - b.a0).find((x) => !x.R && !x.failed); if (!e) return; ensure(e); setTimeout(next, 60); }; setTimeout(next, 60); }
+  function prebuild() { const next = () => { const e = [FL, ...SC].filter(Boolean).find((x) => !x.R && !x.failed); if (!e) return; ensure(e); setTimeout(next, 60); }; setTimeout(next, 60); }
   function ensure(e) {
     if (!e.R && !e.failed) try { e.R = build(e); } catch (err) { e.failed = true; console.warn("3-D view " + e.id + " failed:", err); }
     return e.R;
@@ -723,11 +728,11 @@ gl_FragColor = vec4(c * f * day, 1.0); }`,
       let surf, cl = null;
       if (kind === "earth") {
         const mat = new THREE.MeshPhongMaterial({ map: img(PLANETS + "earth_atmos_4096.jpg", true), normalMap: img(PLANETS + "earth_normal_2048.jpg"), normalScale: new THREE.Vector2(0.9, 0.9), specularMap: img(PLANETS + "earth_specular_2048.jpg"), specular: new THREE.Color("#4a6680"), shininess: 22, emissiveMap: img(PLANETS + "earth_lights_2048.png", true), emissive: new THREE.Color("#ffcf8a").multiplyScalar(1.4) });
-        // city lights only on the night side; close to the ground, two octaves of mottling break up the 10 km texels
+        // city lights only on the night side; close to the ground, two octaves of mottling break up the 10 km texels of the land
         mat.onBeforeCompile = (sh) => {
           sh.uniforms.sunV = sunV; sh.uniforms.detailMap = { value: detailTex() }; sh.uniforms.detailK = detailK;
           sh.fragmentShader = sh.fragmentShader.replace("void main() {", "uniform vec3 sunV; uniform sampler2D detailMap; uniform float detailK;\nvoid main() {")
-            .replace("#include <map_fragment>", "#include <map_fragment>\nif (detailK > 0.001) { float f = texture2D(detailMap, vMapUv * vec2(3000.0, 1500.0)).r, c = texture2D(detailMap, vMapUv * vec2(400.0, 200.0)).g; diffuseColor.rgb *= mix(vec3(1.0), vec3(0.62 + 0.75 * f) * (0.72 + 0.6 * c) * vec3(1.35, 1.32, 1.18), detailK); }")
+            .replace("#include <map_fragment>", "#include <map_fragment>\nfloat landK = detailK * (1.0 - texture2D(specularMap, vSpecularMapUv).r); /* the land, not the sea */\nif (landK > 0.001) { float f = texture2D(detailMap, vMapUv * vec2(3000.0, 1500.0)).r, c = texture2D(detailMap, vMapUv * vec2(400.0, 200.0)).g; diffuseColor.rgb *= mix(vec3(1.0), vec3(0.62 + 0.75 * f) * (0.72 + 0.6 * c) * vec3(1.35, 1.32, 1.18), landK); }")
             .replace("#include <emissivemap_fragment>", "#include <emissivemap_fragment>\ntotalEmissiveRadiance *= smoothstep(0.1, -0.25, dot(normal, sunV));");
         };
         surf = new THREE.Mesh(sph(R0), mat);
@@ -1379,10 +1384,10 @@ diffuseColor.a *= (1.0 - smoothstep(uRim.x, uRim.y, dd)) * (uRim.z > 0.0 ? smoot
       f9flight(c) {
         const { tDock, tUndock, tD, tDrogue, tMain, tSplash } = c, aE = info.ascEnd, a0 = tDock - 290;
         return flight({
-          site: { spot: [0.2761, 0.6589], az: 44 }, land: { spot: [0.2625, 0.6639], az: 40, t: tSplash, from: tDock + 30 * 86400, to: tUndock - 30 * 86400 }, sea: true,
+          site: { spot: [0.2761, 0.6589], az: 44 }, land: { spot: [0.2556, 0.65], az: 40, t: tSplash, from: tDock + 30 * 86400, to: tUndock - 30 * 86400 }, sea: true,
           pad: padF9,
           sun: [[-1e9, [-0.4, 0.62, 0.68]], [700, [-0.42, 0.5, 0.76]], [tD + 1500, [-0.45, 0.6, 0.5]]],
-          cam: [[-1e9, 28, 2, 134], [10, 25, -4.6, 124], [153, 25, -4.6, 62], [700, -20, 10, 30], [aE, -35, 17.5, 29], [tDock - 1500, -13, 11, 40], [tDock + 120, -35, 20, 175], [tUndock - 240, -20, 12, 70], [tUndock + 1200, -35, 17.5, 29], [tD - 700, -30, 15, 26], [tD + 1800, 34, 12, 30], [tDrogue, 30, 8, 70], [tMain, 35, 3, 118], [tSplash + 4, 35, 3, 52]],
+          cam: [[-1e9, 28, 2, 134], [10, 25, -4.6, 124], [153, 25, -4.6, 62], [700, -20, 10, 30], [aE, -35, 17.5, 29], [tDock - 1500, -13, 11, 40], [tDock + 15, -35, 22, 175], [tUndock - 240, -25, 25, 140], [tUndock + 1200, -35, 17.5, 29], [tD - 700, -30, 15, 26], [tD + 1800, 34, 12, 30], [tDrogue, 30, 8, 70], [tMain, 35, 3, 118], [tSplash + 4, 35, 3, 52]],
           titles: [[-1e9, "Falcon 9 · liftoff from LC-39A"], [12, "Falcon 9 · ascent to orbit"], [700, "Crew Dragon · free flight"], [tDock - 1500, "Crew Dragon · docking to the ISS"], [tDock + 30, "Docked to the International Space Station"], [tUndock - 60, "Crew Dragon · undocking"], [tUndock + 1200, "Crew Dragon · heading home"], [tD + 1800, "Crew Dragon · atmospheric entry"], [tDrogue, "Crew Dragon · splashdown"], [tSplash + 20, "Crew Dragon · awaiting recovery"]],
           events: [[a0, "Approach along the station's velocity vector, ~150 m out"], [a0 + 60, "Draco thrusters brake the closing rate"], [a0 + 80, "Holding at the 20 m waypoint · GO for final approach"], [a0 + 95, "Final approach at 10 cm/s, guided by lidar and thermal cameras"], [tDock, "Soft capture: the docking ring's latches catch"], [tDock + 10, "Ring retracts · 12 hooks drive closed for hard capture"], [tD - 600, "Trunk jettisoned · nose cone closed"], [tD + 2100, "Plasma sheath: the air ahead is heated to ~1,600 °C"], [tDrogue, "Two drogue parachutes"], [tMain, "Four main parachutes · ~25 km/h"], [tSplash, "Splashdown"], [tSplash + 4, "Main parachutes cut away"], [tSplash + 30, "The recovery ship comes alongside"]],
           make(W) {
@@ -1491,7 +1496,7 @@ diffuseColor.a *= (1.0 - smoothstep(uRim.x, uRim.y, dd)) * (uRim.z > 0.0 ? smoot
                 ship.flaps(t > tD + 300 && t < w0 + 11 ? (u < 0 ? 0.15 : 0.25 * Math.sin(x.clock * 0.6)) : 0, x.clock);
                 if (u > -4) {
                   const [cx, ch, vx, vh] = herm(M.scatch, Math.max(0, u));
-                  th += (-lin(tilt, Math.max(0, u)) * D2R - th) * k; altM += (ch - altM) * k; a = x.a + (aCatch + cx / E.R0 - x.a) * k;
+                  th += (-lin(tilt, Math.max(0, u)) * D2R - th) * k; altM += (ch - altM) * k; a = x.a + (aCatch + cx / W.E.R0 - x.a) * k;
                   hud = { alt: ch / 1000, vel: Math.hypot(vx, vh) * 3.6 };
                   const q = lin(thr, Math.max(0, u)); ship.fireRSL(q, 0); ship.fireRVac(0, 0);
                   W.P.catchArms(lin(arms, u) * 32 * D2R);
@@ -1543,7 +1548,7 @@ diffuseColor.a *= (1.0 - smoothstep(uRim.x, uRim.y, dd)) * (uRim.z > 0.0 ? smoot
             const gapC = (t) => (t < tUndock ? 0 : t < tDock ? Math.min(0.3 * (t - tUndock) + 0.001 * (t - tUndock) ** 2, t < a0dk ? 60 + (a0dk - t) + 0.0005 * (a0dk - t) ** 2 : -herm(M.lmdock, t - a0dk)[0]) : 0);
             const csmY = (t) => (t < tSep ? 99 : t < a0td ? 99 + 25.35 * sm(0, 260, t - tSep) : t < tDocked ? 96.35 - herm(M.td, t - a0td)[0] : t < tJett ? 85.9 + dY(t) + 10.45 + gapC(t) : 85.9 + dY(tJett) + 10.45);
             const att = eased([[-1e9, -Math.PI / 2], [tUndock + 900, Math.PI / 2], [a0lm - 150, 45 * D2R], [tLand - 5, 0], [tLift + 150, -Math.PI / 2], [tTEI - 2400, Math.PI / 2], [tSM + 60, -Math.PI / 2], [tDrogue, -Math.PI]]);
-            const S = phases([[-1e9, () => 55], [161, () => 82], [548, () => 92], [tSep, (t) => (csmY(t) + 86) / 2], [tOut, (t) => LMy(t) + 8.9], [tUndock, (t) => LMy(t) + 3.5], [tLift, (t) => LMy(t) + 4.6], [tDock, (t) => LMy(t) + 10.6], [tJett, (t) => csmY(t) + 1.6], [tSM, (t) => csmY(t) - 1.4], [tDrogue, (t) => csmY(t) - 9], [tMain, (t) => csmY(t) - 18], [tSplash + 6, (t) => csmY(t) - 3]]);
+            const S = phases([[-1e9, () => 55], [161, () => 82], [548, () => 92], [tSep, (t) => (csmY(t) + 86) / 2], [tOut, (t) => LMy(t) + 8.9], [tUndock, (t) => LMy(t) + 3.5], [tLift, (t) => LMy(t) + 4.6], [tDock, (t) => csmY(t) + 0.15], [tJett, (t) => csmY(t) + 1.6], [tSM, (t) => csmY(t) - 1.4], [tDrogue, (t) => csmY(t) - 9], [tMain, (t) => csmY(t) - 18], [tSplash + 6, (t) => csmY(t) - 3]]);
             const asc = (u) => (u <= 0 ? [0, 0, 0, 0] : u < 10 ? [0, 0.95 * u * u, 0, 1.9 * u] : ((w) => [1.3 * w * w, 95 + 19 * w + 0.2 * w * w, 2.6 * w, 19 + 0.4 * w])(u - 10)); // straight up, then pitch over toward Columbia
             const thr = [[tPDI, 1], [tPDI + 400, 0.6], [a0lm, 0.6], [a0lm + 100, 0.35], [tLand - 0.1, 0.3], [tLand, 0]];
             const aSite = at(tLand).a;
@@ -1620,7 +1625,7 @@ diffuseColor.a *= (1.0 - smoothstep(uRim.x, uRim.y, dd)) * (uRim.z > 0.0 ? smoot
           site: { spot: [0.2761, 0.6591], az: 72 }, land: { spot: [0.1708, 0.675], az: 45, t: tSplash, from: tTLI + 30000, to: tEI - 45000 }, sea: true,
           pad: padSLS,
           sun: [[-1e9, [-0.35, 0.58, 0.73]], [600, [-0.4, 0.55, 0.73]], [tFB - 20000, [0.8, 0.35, 0.48]], [tFB + 20000, [-0.4, 0.55, 0.73]], [tEI - 1500, [-0.45, 0.6, 0.5]]],
-          cam: [[-1e9, 28, 1.6, 210], [10, 26.6, -4.2, 191], [132, 26.6, -4.2, 172], [496, 26.6, -4.2, 70], [aE - 300, -30, 15, 50], [tSep - 30, -7, 16, 50], [tSep + 400, -35, 17.5, 39], [tFB - 3000, 9, 18, 34], [tFB + 3000, -35, 17.5, 39], [tEI - 1300, -30, 15, 23], [tEI - 100, 34, 12, 30], [tDrogue, 30, 8, 62], [tMain, 35, 3, 110], [tSplash + 4, 35, 3, 55]],
+          cam: [[-1e9, 28, 1.6, 210], [10, 26.6, -4.2, 191], [132, 26.6, -4.2, 172], [496, 26.6, -4.2, 70], [aE - 300, -30, 15, 50], [tSep - 30, -7, 16, 50], [tSep + 400, -35, 17.5, 39], [tFB - 3000, 9, 76, 40], [tFB + 3000, -35, 17.5, 39], [tEI - 1300, -30, 15, 23], [tEI - 100, 34, 12, 30], [tDrogue, 30, 8, 62], [tMain, 35, 3, 110], [tSplash + 4, 35, 3, 55]],
           titles: [[-1e9, "Artemis II · liftoff from LC-39B"], [9, "SLS · ascent to orbit"], [500, "SLS · ICPS and Orion in Earth orbit"], [tSep - 10, "Orion separates from the ICPS"], [tSep + 600, "Orion · high Earth orbit"], [tTLI - 300, "Orion · translunar injection"], [tTLI + 3000, "Orion · outbound coast"], [tFB - 40000, "Lunar flyby · far side"], [tFB + 40000, "Orion · free return"], [tEI - 1300, "Orion · crew module"], [tEI - 60, "Orion · skip entry"], [tDrogue, "Orion · splashdown"], [tSplash + 20, "Orion · awaiting recovery"]],
           events: [[tSep - 5, "Orion still on the ICPS after the apogee raise"], [tSep, "Separation · springs push Orion away"], [tSep + 30, "The crew pitches Orion around to face the spent stage"], [tSep + 50, "Proximity operations · flying Orion by hand"], [tSep + 80, "Holding ~12 m off the ICPS"], [tFB - 930, "Earthset · out of contact behind the Moon"], [tFB, "Closest approach · ~8,000 km above the far side"], [tFB + 930, "Earthrise · signal back · the free return heads home"], [tEI - 1200, "Crew module separates from the service module"], [tEI + 10, "Shock layer near 2,800 °C · blackout"], [tEI + 300, "Skip: Orion's lift carries it back up before the final plunge"], [tDrogue, "Drogue parachutes"], [tMain, "Three main parachutes · ~27 km/h"], [tSplash, "Splashdown off San Diego"], [tSplash + 30, "Uprighting bags inflate · Navy divers approach"]],
           make(W) {
@@ -1748,9 +1753,10 @@ diffuseColor.a *= (1.0 - smoothstep(uRim.x, uRim.y, dd)) * (uRim.z > 0.0 ? smoot
       if (o.material.transparent || o.layers.mask === 4) { o.castShadow = false; return; }
       if (!o.geometry.boundingSphere) o.geometry.computeBoundingSphere();
       bs.copy(o.geometry.boundingSphere).applyMatrix4(o.matrixWorld);
-      if (bs.radius < 0.12 * Math.max(1, sc.shadow / 60) || bs.center.distanceTo(sun.target.position) > sc.shadow * 3 + bs.radius) o.castShadow = false;
+      if (bs.radius < 0.12 * Math.max(1, sc.shadow / 60) || (!sc.flight && bs.center.distanceTo(sun.target.position) > sc.shadow * 3 + bs.radius)) o.castShadow = false;
     }); }
-    const off = V3(...sc.chase), orbit = { dist: off.length(), yaw: Math.atan2(off.x, off.z), pitch: Math.asin(off.y / off.length()) };
+    // the flight's camera is scripted; dragging and zooming add to it (orbit = offsets, dist a factor)
+    const off = V3(...sc.chase), orbit = sc.cam ? { dist: 1, yaw: 0, pitch: 0 } : { dist: off.length(), yaw: Math.atan2(off.x, off.z), pitch: Math.asin(off.y / off.length()) };
     let st = { pos: V3() }, ss = 0;
 
     function frame(s, dt) {
@@ -1762,25 +1768,28 @@ diffuseColor.a *= (1.0 - smoothstep(uRim.x, uRim.y, dd)) * (uRim.z > 0.0 ? smoot
         sc.root.quaternion.setFromAxisAngle(axis, lin(sc.tilt || [[0, 0]], s) * D2R);
         st = { h: hh, pos, x, vx, t: s };
         if (e.m.hud) Object.assign(st, { alt: hh / 1000, vel: Math.hypot(vx, vh) * 3.6 });
-      } else st = sc.place(s);
+      } else st = sc.place(s, dt);
       G.shake = 0;
       sc.update(s, st, dt);
       target.copy(st.pos).add(V3(0, (typeof sc.focus === "function" ? sc.focus(s) : sc.focus) || 0, 0));
       sun.position.copy(target).addScaledVector(sc.sunDir, 1200);
       sun.target.position.copy(target);
-      hudv = st.alt === undefined ? null : { alt: st.alt, vel: st.vel, ref: e.m.ref || "" };
-      let ev = "";
-      for (const [et, txt] of sc.events) if (s >= et - 1e-6) ev = txt;
+      hudv = st.alt === undefined ? null : { alt: st.alt, vel: st.vel, ref: st.ref ?? e.m.ref ?? "" };
+      let ev = st.ev ?? "";
+      if (st.ev === undefined) for (const [et, txt] of sc.events) if (s >= et - 1e-6) ev = txt;
       if (capE.textContent !== ev) capE.textContent = ev;
-      const inf = sc.info ? sc.info(st) : "";
+      const inf = st.info !== undefined ? st.info : sc.info ? sc.info(st) : "";
       if (capI.textContent !== inf) capI.textContent = inf;
     }
     function aim() {
       // long shots turn with the wall clock (their mission clock can run thousands of times too fast), set pieces with the mission clock
-      const yaw = orbit.yaw + (sc.spin || 0) * (e.span ? G.rt : ss), d = orbit.dist * (sc.zoom ? sc.zoom(ss) : 1);
-      const pitch = Math.min(1.45, orbit.pitch + (sc.lift ? sc.lift(ss) : 0)), cp = Math.cos(pitch);
+      let yaw, d, pitch;
+      if (sc.cam) { const k = sc.cam(ss); yaw = k.yaw + orbit.yaw; d = k.dist * orbit.dist; pitch = Math.max(-1.45, Math.min(1.45, k.pitch + orbit.pitch)); }
+      else { yaw = orbit.yaw + (sc.spin || 0) * ss; d = orbit.dist * (sc.zoom ? sc.zoom(ss) : 1); pitch = Math.min(1.45, orbit.pitch + (sc.lift ? sc.lift(ss) : 0)); }
+      const cp = Math.cos(pitch);
       camera.position.set(target.x + d * cp * Math.sin(yaw), target.y + d * Math.sin(pitch), target.z + d * cp * Math.cos(yaw));
       if (sc.floor !== undefined) camera.position.y = Math.max(sc.floor, camera.position.y);
+      if (sc.cam) { const g = sc.ground(), v = camera.position.clone().sub(g.c); if (v.length() < g.r) camera.position.copy(g.c).addScaledVector(v.normalize(), g.r); }
       // shake: a smooth rumble on the wall clock (random jitter per frame reads as stutter)
       const j = G.shake * d * 0.003, c = G.rt;
       const jit = V3(j * (Math.sin(c * 31) + Math.sin(c * 19.3 + 1.7)), j * (Math.sin(c * 27.1 + 0.4) + Math.sin(c * 23.9 + 2.2)), 0);
@@ -1789,7 +1798,7 @@ diffuseColor.a *= (1.0 - smoothstep(uRim.x, uRim.y, dd)) * (uRim.z > 0.0 ? smoot
       camera.updateMatrixWorld();
       for (const f of sunViews) f(sc.sunDir);
     }
-    return { scene, frame, aim, orbit, pmin: sc.pmin ?? (sc.space ? -1.45 : -0.1), title: sc.title, reset: () => sc.reset && sc.reset() };
+    return { scene, frame, aim, orbit, pmin: sc.cam ? -1.4 : sc.pmin ?? (sc.space ? -1.45 : -0.1), pmax: sc.cam ? 1.4 : 1.45, dl: sc.cam ? [0.1, 15] : [4, 4000], title: sc.title, reset: () => sc.reset && sc.reset() };
   }
 
   function render() {
@@ -1811,18 +1820,18 @@ diffuseColor.a *= (1.0 - smoothstep(uRim.x, uRim.y, dd)) * (uRim.z > 0.0 ? smoot
     if (!drag || !cur?.R) return;
     const o = cur.R.orbit;
     o.yaw -= (ev.clientX - drag[0]) * 0.006;
-    o.pitch = Math.min(1.45, Math.max(cur.R.pmin, o.pitch + (ev.clientY - drag[1]) * 0.006));
+    o.pitch = Math.min(cur.R.pmax, Math.max(cur.R.pmin, o.pitch + (ev.clientY - drag[1]) * 0.006));
     drag = [ev.clientX, ev.clientY];
     render();
   });
   el.addEventListener("pointerup", () => { drag = null; el.classList.remove("drag"); });
-  el.addEventListener("wheel", (ev) => { ev.preventDefault(); ev.stopPropagation(); if (!cur?.R) return; const o = cur.R.orbit; o.dist = Math.min(4000, Math.max(4, o.dist * Math.exp(ev.deltaY * 0.0012))); render(); }, { passive: false });
-  window.__land = () => ({ cur, G, SC, THREE }); // for poking at the live view from the console
+  el.addEventListener("wheel", (ev) => { ev.preventDefault(); ev.stopPropagation(); if (!cur?.R) return; const o = cur.R.orbit; o.dist = Math.min(cur.R.dl[1], Math.max(cur.R.dl[0], o.dist * Math.exp(ev.deltaY * 0.0012))); render(); }, { passive: false });
+  window.__land = () => ({ cur, G, SC, FL, THREE }); // for poking at the live view from the console
 
   return {
     // mission-clock speed while a scene is up (0 = not in a scene)
     // set pieces run at their own pace for their scripted length; long shots and held set pieces keep the mission's warp
-    speedAt: (t) => { if (merging) return 0; const e = find(t); return e && !e.span && t - e.a0 <= e.m.dur ? e.m.speed : 0; },
+    speedAt,
     on: (t) => { const e = !dead && find(t); return !!e && !e.failed; },
     hud: () => hudv,
     draw,

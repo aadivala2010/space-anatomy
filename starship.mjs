@@ -478,8 +478,8 @@ const MAP = (() => {
       [-7, fix("earth", site0)],
       [0, path("earth", [[0, site0, 0, 0], [62, site0 + 0.0012, 9, 1500], [159, site0 + 0.011, 66, 5800], [300, site0 + 0.075, 135, 12500], [515, null, null]])],
       [515, orbit],
-      [tD, path("earth", [[tD, null, null], [tD + 500, d + 0.56, 120, 26500], [tD + 900, d + 0.98, 75, 24000], [tD + 1300, d + 1.3, 45, 12000], [tD + 1700, d + 1.44, 15, 2000], [tD + 1880, S - 0.0002, 1.5, 350], [tD + 1910, S, 0.15, 30], [tCatch, S, 0.12, 0]])],
-      [tCatch, fix("earth", S, 0.12)],
+      [tD, path("earth", [[tD, null, null], [tD + 500, d + 0.56, 120, 26500], [tD + 900, d + 0.98, 75, 24000], [tD + 1300, d + 1.3, 45, 12000], [tD + 1700, d + 1.44, 15, 2000], [tD + 1880, S - 0.000111, 2.42, 330], [tCatch - 29.5, S - 0.0000816, 1.67, 327], [tCatch, S, 0.081, 0]])],
+      [tCatch, fix("earth", S, 0.081)],
     ],
     fx: [[0, 159, "burn"], [161.5, 515, "burn"], [2400, 2410, "burn"], [tD, tD + 60, "burn"], [tD + 1870, tCatch, "burn"]],
     pose: [[tD + 400, tD + 1870, "belly"], [tD + 1870, END, "up"]],
@@ -519,10 +519,10 @@ const MAP = (() => {
   const sats = { id: "sats", col: "#9fb3d1", name: "Starlink", g: "sat", end: 5200, path: [[1200, orb("earth", 172, 178, ang(orbit, 1200) + 0.00005, 1200)]] };
   return {
     end: END, objs: [ship, booster, sats], hud: "ship", scene,
-    // 3-D: liftoff, ascent and hot staging, booster catch, Starlink deploy, entry, ship catch; free flight in between
+    // 3-D: the whole flight in one shot, slowing for the Starlink deploy and the catch; Super Heavy's catch is the one cut away
     land: [
-      { id: "shpad", from: -7, to: 30 }, { id: "shasc", from: 30, to: 620 }, { id: "sh", at: 415 }, { id: "pez", at: 1200 },
-      { id: "sentry", from: tD + 400, to: tD + 1500 }, { id: "scatch", at: tCatch, to: END }, { id: "coast", craft: [[-1e9, "ship"]] },
+      { id: "flight", kind: "shflight", tD, tCatch, beats: [[1180, 1330, 2], [tCatch - 29.5, tCatch + 6.5, 1]] },
+      { id: "sh", at: 415 },
     ],
     marks: [{ b: "earth", a: site0, kind: "tower", name: "Starbase tower" }],
     cam: [

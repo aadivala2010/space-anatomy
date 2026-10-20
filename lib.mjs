@@ -1146,14 +1146,14 @@ if (HAS_MAP) { EVENTS.push(...MAP.events); EVENTS.sort((a, b) => a[0] - b[0]); }
 const KEY_T = EVENTS.map((e) => e[0]);
 // a slow stretch (from, to, speed) seen from t: the speed allowed there, rising by e every 2.5 s of playback away
 // from it, so the warp eases into and out of every slow stretch instead of jumping
-const ease = (a, z, v, t) => v * Math.exp(Math.max(0, a - t, t - z) / (2.5 * v));
+const slowNear = (a, z, v, t) => v * Math.exp(Math.max(0, a - t, t - z) / (2.5 * v));
 // during the ascent the vehicle's own pace; after it: fast through coasts, slow near every event
 function baseSpeed(t) {
-  if (t < ISO_END) { let s = speedAt(t); for (const [a, z, v] of WIN) s = Math.min(s, ease(a, z, v, t)); return s; }
+  if (t < ISO_END) { let s = speedAt(t); for (const [a, z, v] of WIN) s = Math.min(s, slowNear(a, z, v, t)); return s; }
   let d = Infinity;
   for (const k of KEY_T) d = Math.min(d, Math.abs(t - k));
   const [m, f] = MAP.warp || [20, 2];
-  return Math.min(m + f * d, ease(-Infinity, ISO_END, speedAt(ISO_END), t));
+  return Math.min(m + f * d, slowNear(-Infinity, ISO_END, speedAt(ISO_END), t));
 }
 function missionSpeed(t) { const b = baseSpeed(t); return (LAND && LAND.speedAt(t, b)) || b; }
 const TAB = [];

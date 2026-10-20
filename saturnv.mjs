@@ -549,13 +549,6 @@ labels(LABELS, { L: -270, R: 270 });
 // MISSION
 // =====================================================================================
 const MISSION = String.raw`
-// 3-D (times = MAP times below): liftoff, ascent to TLI and separation, transposition & docking, Eagle's landing and stay,
-// lunar liftoff, docking in lunar orbit, entry, splashdown; free flight in between
-const LANDINGS = [
-  { id: "svpad", from: -9, to: 30 }, { id: "svasc", from: 30, to: 15308 }, { id: "td", at: 15420 }, { id: "lm", at: 369940, to: 447717 },
-  { id: "lmasc", at: 447720 }, { id: "lmdock", at: 460980 }, { id: "asplash", at: 703115, to: 703115 + 2400 },
-  { id: "coast", craft: [[-1e9, "csmlm"], [360720, "lm"], [447720, "lmasc"], [460980, "csmasc"], [468600, "csm"], [701340, "apolloCm"]], chutes: [3, 25.4, 30, "#d33a2c"] },
-];
 // ---- Apollo 11, 16 July 1969, time-warped
 const T_START = -9, T_END = 11880;
 const WIN = [[-9, 14, 1], [130, 172, 4], [185, 200, 4], [540, 560, 5], [9850, 10220, 120], [11700, 11880, 20]];
@@ -599,9 +592,9 @@ const MAP = (() => {
     id: "lm", col: "#ffe08a", name: "Eagle", end: tJett + 9000, g: [[0, "lm"], [tLift, "lmasc"]],
     path: [
       [tUndock, dock("csm", true)], [tDOI, doi],
-      [tPDI, path("moon", [[tPDI, null, null], [tPDI + 300, peri + 0.17, 9, 3600], [tPDI + 600, peri + 0.25, 2, 900], [tPDI + 700, SITE - 0.002, 0.15, 60], [tLand, SITE, 0, 0]])],
+      [tPDI, path("moon", [[tPDI, null, null], [tPDI + 300, SITE - 0.07, 9, 3600], [tLand - 151, SITE - 9 / 1737, 2.2, 565], [tLand - 51, SITE - 0.3 / 1737, 0.15, 55], [tLand, SITE, 0, 0]])],
       [tLand, fix("moon", SITE)],
-      [tLift, path("moon", [[tLift, SITE, 0, 0], [tLift + 60, SITE + 0.002, 1.2, 500], [tLift + 200, SITE + 0.05, 10, 2800], [tIns, null, null]])],
+      [tLift, path("moon", [[tLift, SITE, 0, 0], [tLift + 60, SITE + 3.25 / 1737, 1.55, 500], [tLift + 200, SITE + 0.05, 10, 2800], [tIns, null, null]])],
       [tIns, orb("moon", 17, 83, SITE + 0.25, tIns)], [tIns + 1500, blend("moon")], [tDock, dock("csm")],
       [tJett, orb("moon", 110, 110, ang(llo, tJett) - 0.004, tJett)],
     ],
@@ -628,6 +621,10 @@ const MAP = (() => {
   };
   return {
     end: END, objs: [csm, lm], home,
+    // 3-D: the whole flight in one unbroken shot, slowing for transposition and docking, Eagle's landing and liftoff, the
+    // docking in lunar orbit and the splashdown
+    land: [{ id: "flight", kind: "svflight", tLOI, tUndock, tDOI, tPDI, tLand, tLift, tIns, tDock, tJett, tTEI, tSM, tEI, tDrogue, tMain, tSplash,
+      beats: [[15308, 15448, 4], [tLand - 151, tLand + 5, 4], [tLift - 3, tLift + 37, 1], [tDock - 120, tDock + 20, 4], [tSplash - 35, tSplash + 17, 1]] }],
     hud: [[-1e9, "csm"], [tUndock, "lm"], [tDock, "csm"]],
     marks: [
       { b: "earth", a: site0, kind: "pad", name: "LC-39A", to: 30000 },
@@ -655,7 +652,7 @@ const MAP = (() => {
     ],
   };
 })();
-const RET = MAP.home;
+const RET = MAP.home, LANDINGS = MAP.land;
 const arms = [...svg.querySelectorAll("[data-arm]")];
 const f1clip = svg.querySelector("#svf1clip"), f1g = svg.querySelector('[clip-path="url(#svf1clip)"]');
 const riseAt = (t) => (t > 0.3 ? 8.5 * (t - 0.3) ** 2 : 0);

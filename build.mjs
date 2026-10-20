@@ -1305,11 +1305,10 @@ const MAP = (() => {
   const icps = { id: "icps", col: "#e7b98a", name: "ICPS", g: "icps", end: 40000, path: [[12255, dock("orion")], [12256, orb("earth", 185, 70000, PH, 6990)]] };
   return {
     end: END, objs: [orion, icps], hud: "orion", home,
-    // 3-D: liftoff, ascent to high Earth orbit, ICPS separation, far-side flyby, skip entry, splashdown; free flight in between
+    // 3-D: the whole flight in one shot, slowing for Orion's separation and the splashdown, hurrying through the flyby
     land: [
-      { id: "slspad", from: -8, to: 30 }, { id: "slsasc", from: 30, to: 12250 }, { id: "osep", at: 12255 }, { id: "flyby", at: tFB },
-      { id: "osplash", at: tSplash, to: END },
-      { id: "coast", craft: [[-1e9, "orion"], [tEI - 1200, "orionCm"]], chutes: [3, 35, 40, "#e2672a"] },
+      { id: "flight", kind: "slsflight", tSep: 12255, tTLI, tFB, tEI, tDrogue: tEI + 1050, tMain: tEI + 1110, tSplash,
+        beats: [[12250, 12350, 3], [tFB - 2000, tFB + 2000, 200], [tSplash - 35, tSplash + 17, 1]] },
     ],
     marks: [{ b: "earth", a: site0, kind: "pad", name: "LC-39B", to: 30000 }, { b: "earth", a: aSplash + 0.0006, kind: "boat", name: "Recovery ship", from: tEI - 30000 }],
     cam: [

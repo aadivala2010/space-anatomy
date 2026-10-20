@@ -593,11 +593,12 @@ const MAP = (() => {
   const station = { id: "iss", col: "#cfe0ff", name: "ISS", g: "iss", path: [[-6, iss]] };
   return {
     end: END, objs: [dragon, booster, station], hud: "dragon", scene,
-    // 3-D: liftoff, ascent, booster landing, ISS docking, entry, splashdown; free flight in between
+    // 3-D: the whole flight in one shot, slowing down for the docking, the undocking and the splashdown; the booster's
+    // landing on the droneship is the one cut away
     land: [
-      { id: "f9pad", from: -6, to: 30 }, { id: "f9asc", from: 30, to: 760 }, { id: "f9", at: 541 }, { id: "dock", at: tDock },
-      { id: "dsplash", at: tSplash, to: END },
-      { id: "coast", craft: [[-1e9, "dragon"], [tDock, "dragonIss"], [tUndock, "dragon"], [tD - 600, "capsule"]], chutes: [4, 35, 38, "#d8442c"] },
+      { id: "flight", kind: "f9flight", tDock, tUndock, tD, tDrogue: tD + 2780, tMain: tD + 2830, tSplash,
+        beats: [[tDock - 1500, tDock - 290, 120], [tDock - 290, tDock + 22, 8], [tUndock - 10, tUndock + 240, 12], [tSplash - 36, tSplash + 18, 1]] },
+      { id: "f9", at: 541 },
     ],
     marks: [{ b: "earth", a: site0, kind: "pad", name: "LC-39A", to: 3000 }, { b: "earth", a: ship, kind: "droneship", name: "Droneship", to: 3000 }, { b: "earth", a: d + 2.7436, kind: "boat", name: "Recovery ship", from: tD }],
     cam: [

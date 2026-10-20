@@ -597,7 +597,7 @@ const MAP = (() => {
     // landing on the droneship is the one cut away
     land: [
       { id: "flight", kind: "f9flight", tDock, tUndock, tD, tDrogue: tD + 2780, tMain: tD + 2830, tSplash,
-        beats: [[tDock - 1500, tDock - 290, 120], [tDock - 290, tDock + 22, 8], [tUndock - 10, tUndock + 240, 12], [tSplash - 36, tSplash + 18, 1]] },
+        beats: [[tDock - 1500, tDock - 290, 120], [tDock - 290, tDock + 22, 8], [tUndock - 10, tUndock + 240, 12], [tD - 120, tD + 2100, 60], [tSplash - 36, tSplash + 18, 1]] },
       { id: "f9", at: 541 },
     ],
     marks: [{ b: "earth", a: site0, kind: "pad", name: "LC-39A", to: 3000 }, { b: "earth", a: ship, kind: "droneship", name: "Droneship", to: 3000 }, { b: "earth", a: d + 2.7436, kind: "boat", name: "Recovery ship", from: tD }],

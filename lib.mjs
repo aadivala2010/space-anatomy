@@ -1155,6 +1155,7 @@ function baseSpeed(t) {
   const [m, f] = MAP.warp || [20, 2];
   return Math.min(m + f * d, slowNear(-Infinity, ISO_END, speedAt(ISO_END), t));
 }
+if (HAS_MAP) MM.init(MAP, (t) => tauAt(t)); // before the timeline: the 3-D view's warp reads the map
 function missionSpeed(t) { const b = baseSpeed(t); return (LAND && LAND.speedAt(t, b)) || b; }
 const TAB = [];
 { let t = T_START; while (t < M_END) { TAB.push(t); t += missionSpeed(t) / 60; } TAB.push(M_END); }
@@ -1171,7 +1172,6 @@ const mmap = stage.querySelector(".mmap");
 let mapForced = false;
 if (HAS_MAP) {
   for (const ev of MAP.events) ev[2] = tAt(tauAt(ev[0]) + (ev[2] || 3.4)) - ev[0];
-  MM.init(MAP, tauAt);
   mmap.addEventListener("pointerdown", (ev) => ev.stopPropagation());
   mmap.addEventListener("click", () => { if (missionT < ISO_END || inRet(missionT) || (LAND && LAND.on(missionT))) { mapForced = !mapForced; MM.zoomReset(); drawMap(); } });
   mmap.addEventListener("wheel", (ev) => { if (!stage.dataset.map) return; ev.preventDefault(); ev.stopPropagation(); MM.zoomBy(Math.exp((ev.deltaMode === 1 ? ev.deltaY * 16 : ev.deltaY) * 0.0015)); drawMap(); }, { passive: false });
@@ -1343,6 +1343,7 @@ function exitFlight() {
   fit();
 }
 btn("launch").onclick = () => (flight ? exitFlight() : startFlight());
+window.__speed = missionSpeed;
 window.__seek = (t, clock) => { if (!flight) startFlight(); tau = tauAt(t); missionT = tAt(tau); if (clock !== undefined) fxClock = clock; setPlaying(false); shake = [0, 0]; draw(); camFollow(0, true); if (!cam.follow) fxFrame(); return hudEl.met.textContent; };
 fbar.querySelector('[data-fl="play"]').onclick = () => setPlaying(!playing);
 fbar.querySelector('[data-fl="exit"]').onclick = exitFlight;

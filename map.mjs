@@ -169,7 +169,7 @@ const MM = (() => {
       OBJ[o.id] = o;
     }
     for (const o of LIST) sample(o);
-    CAM = cfg.cam.map(([t, f, r]) => ({ t, f, r, tau: tauAt(t) }));
+    CAM = cfg.cam.map(([t, f, r]) => ({ t, f, r, get tau() { return (this._tau ??= tauAt(t)); } })); // lazy: init runs before the timeline exists
     MARKS = cfg.marks || [];
   }
   function focus(f, t) {

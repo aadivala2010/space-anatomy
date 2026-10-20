@@ -79,9 +79,15 @@ function makeLand(list, stage, info) {
   function speedAt(t, base) {
     const e = SC.find((x) => t >= x.a0 && t <= x.a1);
     if (e) return e.m.speed;
+    // coming back through Earth's air the warp drops with height over speed, so the ground slides by at a believable
+    // rate; back on the surface (at sea, on the tower) it holds at 60
+    if (t > info.ascEnd && info.where(t).ref !== "moon") {
+      const h = info.hud(t);
+      base = Math.min(base, h.alt < 0.1 ? 60 : Math.max(1, (0.5 * (h.alt + 1)) / Math.max(0.05, h.vel / 3600)) * Math.exp(Math.max(0, h.alt - 120) / 8));
+    }
     let w = 0, s = base;
     for (const [a, z, v] of (FL && FL.c.beats) || []) { const k = Math.exp(-Math.max(0, a - t, t - z) / (2.5 * v)); if (k > w) { w = k; s = v; } }
-    return w > 1e-3 ? Math.exp(Math.log(base) + (Math.log(s) - Math.log(base)) * w) : 0;
+    return w > 1e-3 ? Math.exp(Math.log(base) + (Math.log(s) - Math.log(base)) * w) : base;
   }
 
   // ---- where the craft is drawn, sampled every 1/60 s of playback exactly as the player steps its clock, so a frame is the
@@ -93,7 +99,7 @@ function makeLand(list, stage, info) {
   let TB = null;
   function tab() {
     if (TB) return TB;
-    const T = [], A = [], P = [], CEN = [[0, 0], [384400, 0]], TAU = Math.PI * 2, CAP = 0.25 / 60, FIX = 0.05 / 60;
+    const T = [], A = [], P = [], R = [], EX = [], CEN = [[0, 0], [384400, 0]], TAU = Math.PI * 2, CAP = 0.25 / 60, FIX = 0.05 / 60;
     const wrap = (x) => x - TAU * Math.round(x / TAU);
     let t = info.start, av = 0, pr = -1, last = 0, X = 0, a0 = null, ht = null;
     for (;;) {
@@ -107,17 +113,27 @@ function makeLand(list, stage, info) {
         const ax = a0 + X / 6378;
         a = ax + wrap(a - ax) * sm(100, 200, t);
       }
+      let ex = false;
       if (pm !== pr) { av = a; pr = pm; }
       // far from the body (its ground a blur) the drawn angle simply follows the map
       else if (Math.hypot(w.p[0] - c[0], w.p[1] - c[1]) > (pm ? 1737 : 6378) + 5000) av = a + TAU * Math.round((av - a) / TAU);
       else { // any lag is made up quickly while high (the ground a blur), gently once low
         const da = wrap(a - last), up = Math.hypot(w.p[0] - c[0], w.p[1] - c[1]) - (pm ? 1737 : 6378), fx = FIX * (1 + 12 * Math.min(1, Math.max(0, (up - 150) / 800)));
+        ex = up < 150 && Math.abs(da) <= CAP;
         av += Math.abs(da) <= CAP ? da + Math.max(-fx, Math.min(fx, wrap(a - av))) : Math.sign(da) * CAP + Math.max(-fx, Math.min(fx, wrap(a - av))) * Math.min(1, Math.max(0, (up - 150) / 800));
       }
       last = a;
-      T.push(t); A.push(av); P.push(pm);
+      T.push(t); A.push(av); P.push(pm); R.push(a); EX.push(ex);
       if (t >= info.end) break;
       t = Math.min(info.end, t + Math.max(1e-3, info.speed(t)) / 60);
+    }
+    // then backwards: wherever the craft is low and slow (an entry, a landing) the drawn angle is the map's exactly; any lag
+    // left from a warped orbit is wound in before that, at 0.1 rad/s on top of the globe's roll, while the ground is a blur
+    for (let i = A.length - 1, cc = 0; i >= 0; i--) {
+      if (EX[i]) cc = wrap(R[i] - A[i]);
+      else if (P[i] !== P[i + 1]) cc = 0;
+      else cc -= Math.sign(cc) * Math.min(Math.abs(cc), 0.1 / 60);
+      A[i] += cc;
     }
     return (TB = { T, A, P });
   }
@@ -1826,7 +1842,7 @@ diffuseColor.a *= (1.0 - smoothstep(uRim.x, uRim.y, dd)) * (uRim.z > 0.0 ? smoot
   });
   el.addEventListener("pointerup", () => { drag = null; el.classList.remove("drag"); });
   el.addEventListener("wheel", (ev) => { ev.preventDefault(); ev.stopPropagation(); if (!cur?.R) return; const o = cur.R.orbit; o.dist = Math.min(cur.R.dl[1], Math.max(cur.R.dl[0], o.dist * Math.exp(ev.deltaY * 0.0012))); render(); }, { passive: false });
-  window.__land = () => ({ cur, G, SC, FL, THREE }); // for poking at the live view from the console
+  window.__land = () => ({ cur, G, SC, FL, THREE, at, info }); // for poking at the live view from the console
 
   return {
     // mission-clock speed while a scene is up (0 = not in a scene)
